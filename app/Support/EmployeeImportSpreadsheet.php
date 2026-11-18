@@ -14,8 +14,9 @@ class EmployeeImportSpreadsheet
      *
      * @param  list<string>  $headers
      * @param  list<string>  $sample
+     * @param  list<string>  $roles
      */
-    public static function createSample(array $headers, array $sample): string
+    public static function createSample(array $headers, array $sample, array $roles = []): string
     {
         $rows = [$headers, $sample];
         $sheetRows = '';
@@ -33,6 +34,28 @@ class EmployeeImportSpreadsheet
             $sheetRows .= "<row r=\"{$excelRow}\">{$cells}</row>";
         }
 
+        $roleRows = '';
+
+        foreach ($roles as $rowIndex => $role) {
+            $excelRow = $rowIndex + 1;
+            $escapedRole = htmlspecialchars($role, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+            $roleRows .= "<row r=\"{$excelRow}\"><c r=\"A{$excelRow}\" t=\"inlineStr\"><is><t>{$escapedRole}</t></is></c></row>";
+        }
+
+        $roleWorksheet = $roles === []
+            ? ''
+            : '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+        $hiddenRoleSheet = $roles === [] ? '' : '<sheet name="Role Options" sheetId="2" state="hidden" r:id="rId2"/>';
+        $definedRoleRange = $roles === []
+            ? ''
+            : '<definedNames><definedName name="EmployeeRoles">\'Role Options\'!$A$1:$A$'.count($roles).'</definedName></definedNames>';
+        $roleRelationship = $roles === []
+            ? ''
+            : '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>';
+        $roleValidation = $roles === []
+            ? ''
+            : '<dataValidations count="1"><dataValidation type="list" allowBlank="1" showErrorMessage="1" sqref="F2:F1048576"><formula1>EmployeeRoles</formula1></dataValidation></dataValidations>';
+
         $files = [
             '[Content_Types].xml' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 .'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
@@ -40,6 +63,7 @@ class EmployeeImportSpreadsheet
                 .'<Default Extension="xml" ContentType="application/xml"/>'
                 .'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
                 .'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                .$roleWorksheet
                 .'</Types>',
             '_rels/.rels' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
@@ -47,17 +71,26 @@ class EmployeeImportSpreadsheet
                 .'</Relationships>',
             'xl/workbook.xml' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 .'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-                .'<sheets><sheet name="Employees" sheetId="1" r:id="rId1"/></sheets>'
+                .'<sheets><sheet name="Employees" sheetId="1" r:id="rId1"/>'.$hiddenRoleSheet.'</sheets>'
+                .$definedRoleRange
                 .'</workbook>',
             'xl/_rels/workbook.xml.rels' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
                 .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+                .$roleRelationship
                 .'</Relationships>',
             'xl/worksheets/sheet1.xml' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
                 .$sheetRows
-                .'</sheetData></worksheet>',
+                .'</sheetData>'.$roleValidation.'</worksheet>',
         ];
+
+        if ($roles !== []) {
+            $files['xl/worksheets/sheet2.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                .$roleRows
+                .'</sheetData></worksheet>';
+        }
 
         $temporaryPath = tempnam(sys_get_temp_dir(), 'employee-xlsx-');
 

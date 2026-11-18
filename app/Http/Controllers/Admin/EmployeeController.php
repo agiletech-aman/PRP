@@ -101,17 +101,24 @@ class EmployeeController extends Controller
      */
     public function downloadImportSample(Request $request): Response
     {
-        $workbook = EmployeeImportSpreadsheet::createSample(self::IMPORT_HEADERS, [
+        $roles = Role::query()
+            ->unless($request->user()->isSuperAdmin(), fn ($query) => $query->where('slug', '!=', Role::SUPER_ADMIN_SLUG))
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+        $sampleRole = in_array('Employee', $roles, true) ? 'Employee' : ($roles[0] ?? '');
+        $sample = [
             'EMP1001',
             'Neha Verma',
             'neha@example.com',
             'Senior Developer',
             'Engineering',
-            'Employee',
+            $sampleRole,
             'EMP1000',
             '2026-01-15',
             '1',
-        ]);
+        ];
+        $workbook = EmployeeImportSpreadsheet::createSample(self::IMPORT_HEADERS, $sample, $roles);
 
         return response($workbook, 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

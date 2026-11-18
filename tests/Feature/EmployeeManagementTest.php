@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use PharData;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
@@ -54,14 +55,36 @@ class EmployeeManagementTest extends TestCase
     public function test_admin_can_download_employee_import_sample(): void
     {
         $admin = User::factory()->admin()->create();
+        $role = Role::factory()->create(['name' => 'Operations Reviewer', 'slug' => 'operations-reviewer']);
 
-        $this->actingAs($admin)
+        $response = $this->actingAs($admin)
             ->get(route('admin.employees.import.sample'))
             ->assertOk()
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->assertHeader('Content-Disposition', 'attachment; filename="employee-import-sample.xlsx"')
             ->assertHeader('Content-Length')
             ->assertSee('PK', false);
+
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'employee-sample-test-');
+        $this->assertNotFalse($temporaryPath);
+        unlink($temporaryPath);
+        $archivePath = $temporaryPath.'.zip';
+
+        try {
+            file_put_contents($archivePath, $response->getContent());
+            $archive = new PharData($archivePath);
+            $employeeSheet = $archive['xl/worksheets/sheet1.xml']->getContent();
+            $roleSheet = $archive['xl/worksheets/sheet2.xml']->getContent();
+
+            $this->assertStringContainsString('sqref="F2:F1048576"', $employeeSheet);
+            $this->assertStringContainsString('<formula1>EmployeeRoles</formula1>', $employeeSheet);
+            $this->assertStringContainsString($role->name, $roleSheet);
+            $this->assertStringContainsString('state="hidden"', $archive['xl/workbook.xml']->getContent());
+        } finally {
+            if (file_exists($archivePath)) {
+                unlink($archivePath);
+            }
+        }
     }
 
     public function test_admin_can_import_employees_from_csv(): void
@@ -101,6 +124,7 @@ class EmployeeManagementTest extends TestCase
         $workbook = EmployeeImportSpreadsheet::createSample(
             ['employee_code', 'name', 'email', 'designation', 'department', 'role', 'manager_employee_code', 'joining_date', 'is_active'],
             ['EMP4001', 'Asha Patel', 'asha.xlsx@example.com', 'Developer', 'Engineering', $role->name, '', '2026-04-15', '1'],
+            [$role->name],
         );
         $file = UploadedFile::fake()->createWithContent('employees.xlsx', $workbook);
 
