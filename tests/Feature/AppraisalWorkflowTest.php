@@ -90,10 +90,13 @@ class AppraisalWorkflowTest extends TestCase
         });
 
         Mail::assertSent(AppraisalManagerNoticeMail::class, function (AppraisalManagerNoticeMail $mail) use ($manager) {
+            $body = $mail->render();
+
             return $mail->hasTo($manager->email)
-                && Hash::check($mail->plainPassword, $manager->fresh()->password)
-                && str_contains($mail->render(), $manager->employee_code);
+                && ! str_contains($body, 'Password:')
+                && ! str_contains($body, $manager->employee_code);
         });
+        $this->assertTrue(Hash::check('password', $manager->fresh()->password));
 
         Mail::assertSent(AppraisalHrNoticeMail::class, function (AppraisalHrNoticeMail $mail) use ($hr, $employee) {
             $body = $mail->render();
@@ -108,34 +111,36 @@ class AppraisalWorkflowTest extends TestCase
         $this->assertTrue(Hash::check('password', $admin->fresh()->password));
     }
 
-    public function test_a_manager_of_several_employees_gets_one_password_per_batch(): void
+    public function test_manager_gets_login_details_only_when_it_is_their_turn(): void
     {
         Mail::fake();
-        $admin = User::factory()->admin()->create();
-        $first = $this->employeeReadyForAppraisal();
-        $second = User::factory()->create(['department_id' => $first->department_id, 'manager_id' => $first->manager_id]);
+        $appraisal = Appraisal::factory()->withRatings(2)->create();
+        $manager = $appraisal->manager;
 
-        $this->actingAs($admin)
-            ->post(route('admin.appraisals.store'), ['title' => 'Annual Appraisal 2026', 'employee_ids' => [$first->id, $second->id]]);
+        $this->actingAs($appraisal->employee)
+            ->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 4)]);
 
-        $passwords = Mail::sent(AppraisalManagerNoticeMail::class)->map(fn (AppraisalManagerNoticeMail $mail) => $mail->plainPassword)->unique();
+        Mail::assertSent(AppraisalReadyForManagerMail::class, function (AppraisalReadyForManagerMail $mail) use ($manager) {
+            $body = $mail->render();
 
-        $this->assertCount(1, $passwords);
-        $this->assertTrue(Hash::check($passwords->first(), $first->manager->fresh()->password));
+            return $mail->hasTo($manager->email)
+                && Hash::check($mail->plainPassword, $manager->fresh()->password)
+                && str_contains($body, $manager->employee_code)
+                && str_contains($body, $mail->plainPassword);
+        });
     }
 
     public function test_sender_keeps_their_password_when_they_are_the_manager(): void
     {
         Mail::fake();
         $hr = User::factory()->withPermissions(PermissionName::SendAppraisals)->create();
-        $employee = $this->employeeReadyForAppraisal();
-        $employee->update(['manager_id' => $hr->id]);
+        $appraisal = Appraisal::factory()->withRatings(2)->create(['manager_id' => $hr->id, 'sent_by' => $hr->id]);
 
-        $this->actingAs($hr)
-            ->post(route('admin.appraisals.store'), ['title' => 'Annual Appraisal 2026', 'employee_ids' => [$employee->id]]);
+        $this->actingAs($appraisal->employee)
+            ->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 4)]);
 
         $this->assertTrue(Hash::check('password', $hr->fresh()->password));
-        Mail::assertSent(AppraisalManagerNoticeMail::class, fn (AppraisalManagerNoticeMail $mail) => $mail->plainPassword === null
+        Mail::assertSent(AppraisalReadyForManagerMail::class, fn (AppraisalReadyForManagerMail $mail) => $mail->plainPassword === null
             && str_contains($mail->render(), 'use your current portal password'));
     }
 

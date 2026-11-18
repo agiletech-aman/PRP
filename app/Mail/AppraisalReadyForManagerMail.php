@@ -11,13 +11,17 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Sent to the reporting manager once the employee has submitted their self-rating.
+ * Sent to the reporting manager once the employee has submitted their self-rating, with their Employee ID
+ * and login password.
  */
 class AppraisalReadyForManagerMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public Appraisal $appraisal) {}
+    /**
+     * @param  string|null  $plainPassword  A newly issued password, or null when the manager keeps their current one.
+     */
+    public function __construct(public Appraisal $appraisal, public ?string $plainPassword = null) {}
 
     /**
      * Get the message envelope.
@@ -41,6 +45,7 @@ class AppraisalReadyForManagerMail extends Mailable
             markdown: 'mail.appraisals.ready-for-manager',
             with: [
                 'url' => route('appraisal.form', $this->appraisal),
+                'recipient' => $this->appraisal->manager,
             ],
         );
     }

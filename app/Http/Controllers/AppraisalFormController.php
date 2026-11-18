@@ -6,10 +6,12 @@ use App\Http\Requests\SaveHrRemarksRequest;
 use App\Http\Requests\SubmitAppraisalRatingsRequest;
 use App\Mail\AppraisalReadyForManagerMail;
 use App\Models\Appraisal;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 
@@ -65,7 +67,7 @@ class AppraisalFormController extends Controller
         $appraisal->submitRatings($stage, $request->validated('ratings'), $request->validated('comments'));
 
         if ($stage === 'employee' && $appraisal->manager) {
-            Mail::send(new AppraisalReadyForManagerMail($appraisal->load(['employee', 'manager'])));
+            $this->mailManagerTheirTurn($appraisal->load(['employee', 'manager']));
         }
 
         return redirect()->route('appraisal.thank-you', $appraisal)->with('submitted', $stage);
@@ -108,5 +110,26 @@ class AppraisalFormController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('appraisal.login', $appraisal);
+    }
+
+    /**
+     * Tell the manager it is their turn, with their login details. The manager gets a new random password,
+     * changed only if the mail carrying it was sent. Super admins and the person who sent the appraisal
+     * keep their current password.
+     */
+    private function mailManagerTheirTurn(Appraisal $appraisal): void
+    {
+        $manager = $appraisal->manager;
+
+        DB::transaction(function () use ($appraisal, $manager) {
+            $plainPassword = null;
+
+            if (! $manager->isSuperAdmin() && $manager->id !== $appraisal->sent_by) {
+                $plainPassword = User::generatePassword();
+                $manager->update(['password' => $plainPassword]);
+            }
+
+            Mail::send(new AppraisalReadyForManagerMail($appraisal, $plainPassword));
+        });
     }
 }

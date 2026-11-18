@@ -11,16 +11,14 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Sent only to the reporting manager when an appraisal opens, with their own Employee ID and login password.
+ * Sent only to the reporting manager when an appraisal opens. It carries no login details: those come with
+ * {@see AppraisalReadyForManagerMail} once the employee has submitted and it is the manager's turn.
  */
 class AppraisalManagerNoticeMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    /**
-     * @param  string|null  $plainPassword  A newly issued password, or null when the manager keeps their current one.
-     */
-    public function __construct(public Appraisal $appraisal, public ?string $plainPassword = null) {}
+    public function __construct(public Appraisal $appraisal) {}
 
     /**
      * Get the message envelope.
@@ -42,10 +40,6 @@ class AppraisalManagerNoticeMail extends Mailable
     {
         return new Content(
             markdown: 'mail.appraisals.manager-notice',
-            with: [
-                'url' => route('appraisal.form', $this->appraisal),
-                'recipient' => $this->appraisal->manager,
-            ],
         );
     }
 }

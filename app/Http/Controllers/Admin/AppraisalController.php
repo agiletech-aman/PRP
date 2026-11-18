@@ -81,8 +81,9 @@ class AppraisalController extends Controller
     }
 
     /**
-     * Open an appraisal for each selected employee. The employee and their manager each get their own mail
-     * with their Employee ID and a new random password (issued once per user per batch).
+     * Open an appraisal for each selected employee. The employee gets their Employee ID and a new random
+     * password (issued once per user per batch). The manager only gets a notice now; their login details
+     * follow once the employee has submitted.
      *
      * An appraisal is only kept if the employee's mail was sent, and a password only changes if the mail
      * carrying it was sent. Sending stops at the first mail failure, since that almost always means the
@@ -115,9 +116,7 @@ class AppraisalController extends Controller
             $sentAppraisals->push($appraisal);
 
             try {
-                DB::transaction(function () use ($appraisal, $sender, &$issuedPasswords) {
-                    Mail::send(new AppraisalManagerNoticeMail($appraisal, $this->issuePassword($appraisal->manager, $sender, $issuedPasswords)));
-                });
+                Mail::send(new AppraisalManagerNoticeMail($appraisal));
             } catch (TransportExceptionInterface $exception) {
                 report($exception);
 
