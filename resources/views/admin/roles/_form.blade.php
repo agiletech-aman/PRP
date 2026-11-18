@@ -17,7 +17,7 @@
                     <label class="checkbox">
                         <input type="checkbox" name="permissions[]" value="{{ $permission->id }}"
                                @checked(in_array($permission->id, array_map('intval', $selectedPermissionIds), true))>
-                        {{ $permission->label }}
+                        <span>{{ $permission->label }}</span>
                     </label>
                 @endforeach
             </fieldset>

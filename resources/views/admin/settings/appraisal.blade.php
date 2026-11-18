@@ -4,7 +4,7 @@
     <form method="POST" action="{{ route('admin.settings.smtp.update') }}">
         @csrf
 
-        <div class="card card-narrow">
+        <div class="card">
             <div class="card-head">
                 <div>
                     <h2>SMTP setup</h2>
@@ -16,6 +16,7 @@
                 <div class="alert alert-error">{{ $message }}</div>
             @enderror
 
+            <div class="field-grid">
             <x-field name="smtp_host" label="SMTP host" required>
                 <input id="smtp_host" type="text" name="smtp_host" value="{{ old('smtp_host', $smtpSettings['host']) }}" required>
             </x-field>
@@ -50,6 +51,7 @@
             <x-field name="test_recipient" label="Test email recipient">
                 <input id="test_recipient" type="email" name="test_recipient" value="{{ old('test_recipient') }}" autocomplete="email">
             </x-field>
+            </div>
             <p class="field-hint">The test button checks the entered configuration without saving it.</p>
 
             <div class="form-actions">
@@ -63,7 +65,7 @@
         @csrf
         @method('PUT')
 
-        <div class="card card-narrow">
+        <div class="card">
             <div class="card-head">
                 <div>
                     <h2>HR evaluation report mail recipients</h2>
@@ -78,7 +80,7 @@
             <p class="field-hint">Separate multiple addresses with commas or new lines.</p>
         </div>
 
-        <div class="card card-narrow">
+        <div class="card">
             <div class="card-head">
                 <div>
                     <h2>Theme</h2>
