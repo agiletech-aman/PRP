@@ -395,8 +395,10 @@ a.progress-label:hover { color: var(--primary); }
 .small { font-size: 12px; }
 .card-wide { max-width: 760px; }
 .toolbar > .muted { align-self: center; }
-.filters select { width: auto; min-width: 170px; }
-.filters input[type="text"] { min-width: 240px; }
+.filters select { width: auto; min-width: 150px; }
+.filters .search-input { flex: 0 1 240px; }
+.filters input[type="text"] { min-width: 0; width: 100%; }
+.toolbar > .btn { flex-shrink: 0; }
 .badge + .badge, strong + .badge { margin-left: 6px; }
 input:disabled { background: var(--bg); color: var(--muted); }
 

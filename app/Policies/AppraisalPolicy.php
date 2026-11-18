@@ -28,9 +28,12 @@ class AppraisalPolicy
 
     /**
      * HR may add or change optional remarks at any stage, except on their own appraisal.
+     * The super admin only reads them.
      */
     public function addHrRemarks(User $user, Appraisal $appraisal): bool
     {
-        return $user->can(PermissionName::SendAppraisals->value) && $user->id !== $appraisal->employee_id;
+        return ! $user->isSuperAdmin()
+            && $user->can(PermissionName::SendAppraisals->value)
+            && $user->id !== $appraisal->employee_id;
     }
 }

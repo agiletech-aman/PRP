@@ -265,6 +265,23 @@ class AppraisalWorkflowTest extends TestCase
         $this->assertNull($appraisal->fresh()->hr_remarks_by);
     }
 
+    public function test_admin_only_reads_hr_remarks(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $appraisal = Appraisal::factory()->withRatings()->create(['hr_remarks' => 'Strong performer.']);
+
+        $this->actingAs($admin)
+            ->get(route('admin.appraisals.show', $appraisal))
+            ->assertOk()
+            ->assertSee('Strong performer.')
+            ->assertDontSee('Save HR remarks');
+
+        $this->put(route('admin.appraisals.hr-remarks', $appraisal), ['hr_remarks' => 'Changed'])
+            ->assertForbidden();
+
+        $this->assertSame('Strong performer.', $appraisal->fresh()->hr_remarks);
+    }
+
     public function test_employee_and_manager_cannot_save_hr_remarks(): void
     {
         $appraisal = Appraisal::factory()->create();

@@ -98,5 +98,29 @@
             {{ $slot }}
         </main>
     </div>
+
+    <script>
+        /* Filter lists while typing: submit the search form shortly after the user stops typing. */
+        document.querySelectorAll('.filters .search-input input[name="search"]').forEach((input) => {
+            const focusKey = 'refocus-search:' + location.pathname;
+            let timer;
+
+            try {
+                if (sessionStorage.getItem(focusKey)) {
+                    sessionStorage.removeItem(focusKey);
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                }
+            } catch (error) {}
+
+            input.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    try { sessionStorage.setItem(focusKey, '1'); } catch (error) {}
+                    input.form.requestSubmit();
+                }, 500);
+            });
+        });
+    </script>
 </body>
 </html>
