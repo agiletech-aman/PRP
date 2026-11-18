@@ -59,13 +59,14 @@ class EmployeeImportSpreadsheet
                 .'</sheetData></worksheet>',
         ];
 
-        $path = tempnam(sys_get_temp_dir(), 'employee-xlsx-');
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'employee-xlsx-');
 
-        if ($path === false) {
+        if ($temporaryPath === false) {
             throw new RuntimeException('Unable to create a temporary Excel workbook.');
         }
 
-        unlink($path);
+        unlink($temporaryPath);
+        $path = $temporaryPath.'.zip';
 
         try {
             $archive = new PharData($path, 0, null, Phar::ZIP);
