@@ -15,6 +15,8 @@ class SettingsController extends Controller
 {
     public const HR_EVALUATOR_IDS_KEY = 'hr_evaluator_user_ids';
 
+    public const HR_REPORT_RECIPIENTS_KEY = 'hr_report_recipient_emails';
+
     public static function themeKey(int $userId): string
     {
         return "theme_mode_user_{$userId}";
@@ -47,6 +49,7 @@ class SettingsController extends Controller
         return view('admin.settings.appraisal', [
             'eligibleUsers' => $eligibleUsers,
             'selectedIds' => $selectedIds,
+            'reportRecipients' => implode(",\n", AppraisalSetting::getJson(self::HR_REPORT_RECIPIENTS_KEY, [])),
             'themeMode' => AppraisalSetting::get(self::themeKey((int) auth()->id()), 'light'),
             'sidebarCollapsed' => AppraisalSetting::get(self::sidebarKey((int) auth()->id()), '0') === '1',
         ]);
@@ -59,7 +62,19 @@ class SettingsController extends Controller
             'evaluator_ids.*' => ['integer', 'exists:users,id'],
             'theme_mode' => ['required', 'in:light,dark'],
             'sidebar_collapsed' => ['nullable', 'in:0,1'],
+            'report_recipient_emails' => ['nullable', 'string', 'max:5000'],
         ]);
+
+        $reportRecipients = collect(preg_split('/[,\n\r]+/', (string) $request->input('report_recipient_emails')))
+            ->map(fn ($email) => strtolower(trim($email)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        foreach ($reportRecipients as $email) {
+            validator(['email' => $email], ['email' => ['email:rfc']])
+                ->validate();
+        }
 
         $selectedIds = array_values(array_unique(array_map(
             'intval',
@@ -83,6 +98,7 @@ class SettingsController extends Controller
         }
 
         AppraisalSetting::putJson(self::HR_EVALUATOR_IDS_KEY, $selectedIds);
+        AppraisalSetting::putJson(self::HR_REPORT_RECIPIENTS_KEY, $reportRecipients->all());
         AppraisalSetting::put(self::themeKey((int) $request->user()->id), $validated['theme_mode']);
         AppraisalSetting::put(
             self::sidebarKey((int) $request->user()->id),

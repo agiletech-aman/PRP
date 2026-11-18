@@ -9,6 +9,7 @@ use App\Mail\AppraisalInvitationMail;
 use App\Mail\AppraisalManagerNoticeMail;
 use App\Mail\AppraisalReadyForHrMail;
 use App\Mail\AppraisalReadyForManagerMail;
+use App\Mail\CompletedAppraisalReportMail;
 use App\Models\Appraisal;
 use App\Models\AppraisalSetting;
 use App\Models\Department;
@@ -475,7 +476,9 @@ class AppraisalWorkflowTest extends TestCase
 
     public function test_hr_evaluator_can_add_hr_rating_and_complete_appraisal(): void
     {
+        Mail::fake();
         $evaluator = User::factory()->withPermissions(PermissionName::EvaluateAppraisals)->create();
+        AppraisalSetting::putJson(SettingsController::HR_REPORT_RECIPIENTS_KEY, ['director@example.com', 'hr@example.com']);
         $appraisal = Appraisal::factory()->withRatings(1)->create([
             'status' => AppraisalStatus::AwaitingHr,
         ]);
@@ -498,6 +501,11 @@ class AppraisalWorkflowTest extends TestCase
         $this->assertNotNull($appraisal->hr_submitted_at);
         $this->assertSame('Strong overall performance.', $appraisal->hr_comments);
         $this->assertEquals(4.0, $appraisal->averageRating('hr'));
+        Mail::assertSent(CompletedAppraisalReportMail::class, function (CompletedAppraisalReportMail $mail) {
+            return $mail->hasTo('director@example.com')
+                && $mail->hasTo('hr@example.com')
+                && count($mail->attachments()) === 1;
+        });
     }
 
     public function test_performance_report_permission_can_view_and_export_all_appraisal_reports(): void

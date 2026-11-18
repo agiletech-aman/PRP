@@ -145,6 +145,7 @@ class RoleManagementTest extends TestCase
                 'evaluator_ids' => [],
                 'theme_mode' => 'dark',
                 'sidebar_collapsed' => '1',
+                'report_recipient_emails' => "director@example.com,\nhr@example.com",
             ])
             ->assertRedirect();
 
@@ -155,6 +156,10 @@ class RoleManagementTest extends TestCase
         $this->assertSame(
             '1',
             AppraisalSetting::get(SettingsController::sidebarKey($settingsUser->id), '0'),
+        );
+        $this->assertSame(
+            ['director@example.com', 'hr@example.com'],
+            AppraisalSetting::getJson(SettingsController::HR_REPORT_RECIPIENTS_KEY, []),
         );
 
         $this->actingAs($settingsUser)

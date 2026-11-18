@@ -7,6 +7,7 @@ use App\Http\Requests\SaveHrRemarksRequest;
 use App\Http\Requests\SubmitAppraisalRatingsRequest;
 use App\Mail\AppraisalReadyForHrMail;
 use App\Mail\AppraisalReadyForManagerMail;
+use App\Mail\CompletedAppraisalReportMail;
 use App\Models\Appraisal;
 use App\Models\AppraisalSetting;
 use App\Models\User;
@@ -76,6 +77,9 @@ class AppraisalFormController extends Controller
         if ($stage === 'manager') {
             $this->mailHrEvaluators($appraisal->load(['employee', 'manager']));
         }
+        if ($stage === 'hr') {
+            $this->mailCompletedReport($appraisal->load(['employee', 'manager', 'department', 'ratings']));
+        }
 
         return redirect()->route('appraisal.thank-you', $appraisal)->with('submitted', $stage);
     }
@@ -138,6 +142,17 @@ class AppraisalFormController extends Controller
 
             Mail::send(new AppraisalReadyForManagerMail($appraisal, $plainPassword));
         });
+    }
+
+    private function mailCompletedReport(Appraisal $appraisal): void
+    {
+        $recipients = AppraisalSetting::getJson(SettingsController::HR_REPORT_RECIPIENTS_KEY, []);
+
+        if ($recipients === []) {
+            return;
+        }
+
+        Mail::send(new CompletedAppraisalReportMail($appraisal, array_values($recipients)));
     }
 
     private function mailHrEvaluators(Appraisal $appraisal): void

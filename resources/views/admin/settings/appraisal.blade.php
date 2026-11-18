@@ -36,6 +36,21 @@
         <div class="card card-narrow">
             <div class="card-head">
                 <div>
+                    <h2>HR evaluation report mail recipients</h2>
+                    <p class="muted small">When HR completes an evaluation, the appraisal report CSV will be mailed to these addresses.</p>
+                </div>
+            </div>
+
+            <x-field name="report_recipient_emails" label="Email addresses">
+                <textarea id="report_recipient_emails" name="report_recipient_emails" rows="4"
+                          placeholder="hr@example.com, director@example.com">{{ old('report_recipient_emails', $reportRecipients) }}</textarea>
+            </x-field>
+            <p class="field-hint">Separate multiple addresses with commas or new lines.</p>
+        </div>
+
+        <div class="card card-narrow">
+            <div class="card-head">
+                <div>
                     <h2>Theme</h2>
                     <p class="muted small">Choose how the portal looks for your account.</p>
                 </div>
