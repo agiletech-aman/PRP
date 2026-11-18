@@ -41,6 +41,10 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         ->except(['index', 'show'])
         ->middleware('can:'.PermissionName::ManageEmployees->value);
 
+    Route::post('employees/{employee}/send-credentials', [EmployeeController::class, 'sendCredentials'])
+        ->middleware('can:'.PermissionName::ManageEmployees->value)
+        ->name('employees.send-credentials');
+
     Route::middleware('can:'.PermissionName::ManageDepartments->value)->group(function () {
         Route::resource('departments', DepartmentController::class)->except(['create', 'show']);
         Route::get('departments/{department}/form', [DepartmentController::class, 'form'])->name('departments.form');

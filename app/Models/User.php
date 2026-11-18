@@ -101,6 +101,18 @@ class User extends Authenticatable
     }
 
     /**
+     * A random 10-character login password that is easy to type: letters and digits, no look-alike characters.
+     */
+    public static function generatePassword(): string
+    {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+
+        return collect(range(1, 10))
+            ->map(fn () => $alphabet[random_int(0, strlen($alphabet) - 1)])
+            ->implode('');
+    }
+
+    /**
      * Up to two capital letters from the user's name, shown in avatars.
      */
     public function initials(): string

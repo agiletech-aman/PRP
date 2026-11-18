@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Mail\EmployeeCredentialsMail;
 use App\Models\Department;
 use App\Models\Role;
 use App\Models\User;
 use App\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
 class EmployeeManagementTest extends TestCase
@@ -28,8 +31,6 @@ class EmployeeManagementTest extends TestCase
             'role_id' => Role::factory()->create()->id,
             'manager_id' => null,
             'joining_date' => '2024-04-01',
-            'password' => 'secret-pass',
-            'password_confirmation' => 'secret-pass',
             'is_active' => '1',
             ...$overrides,
         ];
@@ -50,6 +51,7 @@ class EmployeeManagementTest extends TestCase
 
     public function test_admin_can_create_employee(): void
     {
+        Mail::fake();
         $admin = User::factory()->admin()->create();
 
         $this->actingAs($admin)
@@ -61,7 +63,82 @@ class EmployeeManagementTest extends TestCase
         $this->assertSame('riya@example.com', $employee->email);
         $this->assertTrue($employee->manager->is($admin));
         $this->assertTrue($employee->is_active);
-        $this->assertTrue(Hash::check('secret-pass', $employee->password));
+
+        Mail::assertSent(EmployeeCredentialsMail::class, function (EmployeeCredentialsMail $mail) use ($employee) {
+            $body = $mail->render();
+
+            return $mail->hasTo('riya@example.com')
+                && strlen($mail->plainPassword) === 10
+                && Hash::check($mail->plainPassword, $employee->password)
+                && str_contains($body, 'EMP2001')
+                && str_contains($body, $mail->plainPassword);
+        });
+    }
+
+    public function test_each_new_employee_gets_a_different_random_password(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->post(route('admin.employees.store'), $this->validPayload());
+        $this->post(route('admin.employees.store'), $this->validPayload(['employee_code' => 'EMP2002', 'email' => 'second@example.com']));
+
+        $passwords = Mail::sent(EmployeeCredentialsMail::class)->map(fn (EmployeeCredentialsMail $mail) => $mail->plainPassword);
+
+        $this->assertCount(2, $passwords);
+        $this->assertNotSame($passwords[0], $passwords[1]);
+    }
+
+    public function test_employee_is_not_created_when_credentials_mail_fails(): void
+    {
+        Mail::shouldReceive('send')->once()->andThrow(new TransportException('Connection refused'));
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.employees.store'), $this->validPayload())
+            ->assertSessionHasErrors('employee');
+
+        $this->assertDatabaseMissing('users', ['employee_code' => 'EMP2001']);
+    }
+
+    public function test_admin_can_send_new_credentials_to_an_employee(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->admin()->create();
+        $employee = User::factory()->create();
+
+        $this->actingAs($admin)
+            ->from(route('admin.employees.index'))
+            ->post(route('admin.employees.send-credentials', $employee))
+            ->assertRedirect(route('admin.employees.index'))
+            ->assertSessionHas('status');
+
+        $this->assertFalse(Hash::check('password', $employee->fresh()->password));
+
+        Mail::assertSent(EmployeeCredentialsMail::class, fn (EmployeeCredentialsMail $mail) => $mail->hasTo($employee->email)
+            && Hash::check($mail->plainPassword, $employee->fresh()->password));
+    }
+
+    public function test_password_is_kept_when_resending_credentials_fails(): void
+    {
+        Mail::shouldReceive('send')->once()->andThrow(new TransportException('Connection refused'));
+        $admin = User::factory()->admin()->create();
+        $employee = User::factory()->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.employees.send-credentials', $employee))
+            ->assertSessionHasErrors('employee');
+
+        $this->assertTrue(Hash::check('password', $employee->fresh()->password));
+    }
+
+    public function test_viewer_cannot_send_credentials(): void
+    {
+        $viewer = User::factory()->withPermissions(PermissionName::ViewEmployees)->create();
+
+        $this->actingAs($viewer)
+            ->post(route('admin.employees.send-credentials', User::factory()->create()))
+            ->assertForbidden();
     }
 
     public function test_employee_code_and_email_must_be_unique(): void
@@ -74,7 +151,7 @@ class EmployeeManagementTest extends TestCase
             ->assertSessionHasErrors(['employee_code', 'email']);
     }
 
-    public function test_update_keeps_password_when_left_blank(): void
+    public function test_updating_an_employee_does_not_change_their_password(): void
     {
         $admin = User::factory()->admin()->create();
         $employee = User::factory()->create();
@@ -85,8 +162,6 @@ class EmployeeManagementTest extends TestCase
                 'employee_code' => $employee->employee_code,
                 'email' => $employee->email,
                 'name' => 'Renamed Person',
-                'password' => '',
-                'password_confirmation' => '',
             ]))
             ->assertRedirect(route('admin.employees.index'));
 
@@ -105,8 +180,6 @@ class EmployeeManagementTest extends TestCase
                 'employee_code' => $employee->employee_code,
                 'email' => $employee->email,
                 'manager_id' => $employee->id,
-                'password' => '',
-                'password_confirmation' => '',
             ]))
             ->assertSessionHasErrors('manager_id');
     }
@@ -122,8 +195,6 @@ class EmployeeManagementTest extends TestCase
                 'email' => $admin->email,
                 'role_id' => Role::factory()->create()->id,
                 'is_active' => null,
-                'password' => '',
-                'password_confirmation' => '',
             ]))
             ->assertRedirect(route('admin.employees.index'));
 
@@ -175,12 +246,11 @@ class EmployeeManagementTest extends TestCase
         $this->actingAs($admin)
             ->from(route('admin.employees.create'))
             ->followingRedirects()
-            ->post(route('admin.employees.store'), $this->validPayload(['email' => 'not-an-email', 'password_confirmation' => 'different']))
+            ->post(route('admin.employees.store'), $this->validPayload(['email' => 'not-an-email']))
             ->assertOk()
             ->assertSee('Please fix the highlighted fields below.')
-            ->assertSee('field has-error', false)
-            ->assertSee('The email field must be a valid email address.')
-            ->assertSee('The password field confirmation does not match.');
+            ->assertSee('field field-full has-error', false)
+            ->assertSee('The email field must be a valid email address.');
     }
 
     public function test_employee_forms_render(): void
@@ -189,7 +259,7 @@ class EmployeeManagementTest extends TestCase
 
         $this->actingAs($admin);
 
-        $this->get(route('admin.employees.create'))->assertOk();
+        $this->get(route('admin.employees.create'))->assertOk()->assertSee('A random password is generated')->assertDontSee('name="password"', false);
         $this->get(route('admin.employees.edit', User::factory()->create()))->assertOk();
         $this->get(route('admin.employees.edit', $admin))->assertOk()->assertSee('You cannot change your own role.');
     }

@@ -5,7 +5,6 @@ namespace App\Http\Requests;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 
 class UpdateEmployeeRequest extends StoreEmployeeRequest
 {
@@ -35,7 +34,6 @@ class UpdateEmployeeRequest extends StoreEmployeeRequest
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($employee)],
             'role_id' => [Rule::excludeIf($this->user()->is($employee)), 'required', 'integer', $this->assignableRoleRule()],
             'manager_id' => ['nullable', 'integer', 'exists:users,id', Rule::notIn([$employee->id])],
-            'password' => ['nullable', 'confirmed', Password::min(8)],
         ];
     }
 

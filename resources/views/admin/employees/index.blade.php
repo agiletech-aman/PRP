@@ -74,6 +74,13 @@
                                     @if (! $employee->isSuperAdmin() || auth()->user()->isSuperAdmin())
                                         <x-icon-link :href="route('admin.employees.edit', $employee)" icon="edit" label="Edit" />
                                         @unless (auth()->user()->is($employee))
+                                            <form method="POST" action="{{ route('admin.employees.send-credentials', $employee) }}" class="icon-form"
+                                                  onsubmit="return confirm({{ \Illuminate\Support\Js::from('Generate a new password for '.$employee->name.' and mail it to '.$employee->email.'? Their current password will stop working.') }})">
+                                                @csrf
+                                                <button type="submit" class="icon-btn" title="Send login credentials" aria-label="Send login credentials">
+                                                    <x-icon name="mail" />
+                                                </button>
+                                            </form>
                                             <x-icon-delete :action="route('admin.employees.destroy', $employee)" :confirm="'Delete '.$employee->name.'?'" />
                                         @endunless
                                     @endif

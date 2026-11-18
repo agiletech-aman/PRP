@@ -8,7 +8,6 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
-use Illuminate\Validation\Rules\Password;
 
 class StoreEmployeeRequest extends FormRequest
 {
@@ -36,7 +35,6 @@ class StoreEmployeeRequest extends FormRequest
             'role_id' => ['required', 'integer', $this->assignableRoleRule()],
             'manager_id' => ['nullable', 'integer', 'exists:users,id'],
             'joining_date' => ['nullable', 'date'],
-            'password' => ['required', 'confirmed', Password::min(8)],
         ];
     }
 

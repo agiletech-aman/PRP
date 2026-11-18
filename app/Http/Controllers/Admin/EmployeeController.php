@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
+use App\Mail\EmployeeCredentialsMail;
 use App\Models\Department;
 use App\Models\Role;
 use App\Models\User;
@@ -12,10 +13,15 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class EmployeeController extends Controller
 {
+    private const MAIL_FAILED_MESSAGE = 'The login details mail could not be sent. Please check the mail settings and try again.';
+
     /**
      * List employees; filter with ?search=, ?department=, ?role=, ?manager= (an id, or "none") and ?status=.
      */
@@ -73,11 +79,62 @@ class EmployeeController extends Controller
         ]);
     }
 
+    /**
+     * Create the employee with a random password and mail them their login details.
+     * If the mail cannot be sent, the employee is not created.
+     */
     public function store(StoreEmployeeRequest $request): RedirectResponse
     {
-        User::create([...$request->validated(), 'is_active' => $request->boolean('is_active')]);
+        try {
+            $employee = DB::transaction(function () use ($request) {
+                $plainPassword = User::generatePassword();
 
-        return redirect()->route('admin.employees.index')->with('status', 'Employee added.');
+                $employee = User::create([
+                    ...$request->validated(),
+                    'password' => $plainPassword,
+                    'is_active' => $request->boolean('is_active'),
+                ]);
+
+                Mail::send(new EmployeeCredentialsMail($employee, $plainPassword));
+
+                return $employee;
+            });
+        } catch (TransportExceptionInterface $exception) {
+            report($exception);
+
+            return back()->withInput()->withErrors(['employee' => self::MAIL_FAILED_MESSAGE.' The employee was not added.']);
+        }
+
+        return redirect()
+            ->route('admin.employees.index')
+            ->with('status', "Employee added. Login details were mailed to {$employee->email}.");
+    }
+
+    /**
+     * Replace the employee's password with a new random one and mail it to them.
+     */
+    public function sendCredentials(Request $request, User $employee): RedirectResponse
+    {
+        $this->ensureCanModify($request->user(), $employee);
+
+        if ($request->user()->is($employee)) {
+            return back()->withErrors(['employee' => 'Change your own password from My profile.']);
+        }
+
+        try {
+            DB::transaction(function () use ($employee) {
+                $plainPassword = User::generatePassword();
+                $employee->update(['password' => $plainPassword]);
+
+                Mail::send(new EmployeeCredentialsMail($employee, $plainPassword));
+            });
+        } catch (TransportExceptionInterface $exception) {
+            report($exception);
+
+            return back()->withErrors(['employee' => self::MAIL_FAILED_MESSAGE.' The old password still works.']);
+        }
+
+        return back()->with('status', "New login details were mailed to {$employee->email}.");
     }
 
     public function edit(Request $request, User $employee): View
@@ -93,10 +150,6 @@ class EmployeeController extends Controller
     public function update(UpdateEmployeeRequest $request, User $employee): RedirectResponse
     {
         $data = $request->validated();
-
-        if (blank($data['password'] ?? null)) {
-            unset($data['password']);
-        }
 
         $isEditingSelf = $request->user()->is($employee);
 

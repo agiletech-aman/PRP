@@ -37,7 +37,7 @@
     </x-field>
 </x-form-section>
 
-<x-form-section title="Login & access" :description="$employee->exists ? 'Leave the password blank to keep the current one.' : 'They sign in with their Employee ID or email.'">
+<x-form-section title="Login & access" :description="$employee->exists ? 'To give them a new password, use “Send login credentials” on the employee list.' : 'A random password is generated and mailed to them with their Employee ID.'">
     <x-field name="role_id" label="Role" :required="! $isEditingSelf" :hint="$isEditingSelf ? 'You cannot change your own role.' : 'Controls what they can see and do.'" full>
         @if ($isEditingSelf)
             <input id="role_id" type="text" value="{{ $employee->role?->name ?? '—' }}" disabled>
@@ -49,12 +49,6 @@
                 @endforeach
             </select>
         @endif
-    </x-field>
-    <x-field name="password" label="Password" :required="! $employee->exists" hint="At least 8 characters.">
-        <input id="password" type="password" name="password" autocomplete="new-password" @required(! $employee->exists)>
-    </x-field>
-    <x-field name="password_confirmation" label="Confirm password" :required="! $employee->exists">
-        <input id="password_confirmation" type="password" name="password_confirmation" autocomplete="new-password" @required(! $employee->exists)>
     </x-field>
 
     @unless ($isEditingSelf)
