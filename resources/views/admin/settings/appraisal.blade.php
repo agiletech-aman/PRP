@@ -1,37 +1,9 @@
-<x-layouts.admin title="Settings" subtitle="Choose who receives appraisal mail after the manager submits ratings">
+<x-layouts.admin title="Settings" subtitle="Configure report recipients and your portal theme">
     <a href="{{ route('admin.roles.index') }}" class="back-link">Roles &amp; Permissions</a>
 
     <form method="POST" action="{{ route('admin.settings.appraisal.update') }}">
         @csrf
         @method('PUT')
-
-        <div class="card card-narrow">
-            <div class="card-head">
-                <div>
-                    <h2>Post-manager mail recipients</h2>
-                    <p class="muted small">Selected users receive an appraisal mail and remain HR evaluators.</p>
-                </div>
-            </div>
-
-            @error('evaluator_ids')
-                <div class="alert alert-error">{{ $message }}</div>
-            @enderror
-
-            <div class="permission-groups">
-                @forelse ($eligibleUsers as $evaluator)
-                    <label class="checkbox">
-                        <input type="checkbox" name="evaluator_ids[]" value="{{ $evaluator->id }}"
-                               @checked(in_array($evaluator->id, $selectedIds, true))>
-                        <span>
-                            <strong>{{ $evaluator->name }}</strong>
-                            <span class="muted d-block">{{ $evaluator->employee_code }} · {{ $evaluator->email }}</span>
-                        </span>
-                    </label>
-                @empty
-                    <p class="muted">No active users have the HR evaluation permission or Admin role.</p>
-                @endforelse
-            </div>
-        </div>
 
         <div class="card card-narrow">
             <div class="card-head">

@@ -458,20 +458,21 @@ class AppraisalWorkflowTest extends TestCase
         Mail::assertSent(AppraisalReadyForHrMail::class, fn ($mail) => $mail->hasTo($secondEvaluator->email));
     }
 
-    public function test_post_manager_mail_recipients_can_be_limited_by_settings(): void
+    public function test_post_manager_notice_uses_permission_not_removed_recipient_setting(): void
     {
         Mail::fake();
         $selectedEvaluator = User::factory()->withPermissions(PermissionName::EvaluateAppraisals)->create();
-        User::factory()->withPermissions(PermissionName::EvaluateAppraisals)->create();
-        AppraisalSetting::putJson(SettingsController::HR_EVALUATOR_IDS_KEY, [$selectedEvaluator->id]);
+        $otherEvaluator = User::factory()->withPermissions(PermissionName::EvaluateAppraisals)->create();
+        AppraisalSetting::putJson('hr_evaluator_user_ids', [$selectedEvaluator->id]);
         $appraisal = Appraisal::factory()->employeeSubmitted()->withRatings(1)->create();
 
         $this->actingAs($appraisal->manager)
             ->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 3)])
             ->assertRedirect(route('appraisal.thank-you', $appraisal));
 
-        Mail::assertSent(AppraisalReadyForHrMail::class, 1);
+        Mail::assertSent(AppraisalReadyForHrMail::class, 2);
         Mail::assertSent(AppraisalReadyForHrMail::class, fn ($mail) => $mail->hasTo($selectedEvaluator->email));
+        Mail::assertSent(AppraisalReadyForHrMail::class, fn ($mail) => $mail->hasTo($otherEvaluator->email));
     }
 
     public function test_hr_evaluator_can_add_hr_rating_and_complete_appraisal(): void

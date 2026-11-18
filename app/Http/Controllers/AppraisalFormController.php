@@ -157,19 +157,11 @@ class AppraisalFormController extends Controller
 
     private function mailHrEvaluators(Appraisal $appraisal): void
     {
-        $configuredIds = AppraisalSetting::getJson(SettingsController::HR_EVALUATOR_IDS_KEY, null);
-
-        $evaluators = $configuredIds === null
-            ? User::query()
-                ->where('is_active', true)
-                ->whereHas('role.permissions', fn ($query) => $query->where('name', PermissionName::EvaluateAppraisals->value))
-                ->orderBy('name')
-                ->get()
-            : User::query()
-                ->where('is_active', true)
-                ->whereKey($configuredIds)
-                ->orderBy('name')
-                ->get();
+        $evaluators = User::query()
+            ->where('is_active', true)
+            ->whereHas('role.permissions', fn ($query) => $query->where('name', PermissionName::EvaluateAppraisals->value))
+            ->orderBy('name')
+            ->get();
 
         foreach ($evaluators as $evaluator) {
             DB::transaction(function () use ($appraisal, $evaluator) {

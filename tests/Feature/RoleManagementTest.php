@@ -11,6 +11,7 @@ use App\Models\User;
 use App\PermissionName;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class RoleManagementTest extends TestCase
@@ -48,6 +49,25 @@ class RoleManagementTest extends TestCase
 
         $this->assertSame('team-lead', $role->slug);
         $this->assertEqualsCanonicalizing($permissionIds, $role->permissions->pluck('id')->all());
+    }
+
+    public function test_role_form_registers_new_permissions_when_database_rows_are_stale(): void
+    {
+        $permissionIds = Permission::whereIn('name', [
+            PermissionName::ViewPerformanceReports->value,
+            PermissionName::ManageAppraisalSettings->value,
+        ])->pluck('id');
+        DB::table('permission_role')->whereIn('permission_id', $permissionIds)->delete();
+        Permission::whereIn('id', $permissionIds)->delete();
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.roles.create'))
+            ->assertOk()
+            ->assertSee(PermissionName::ViewPerformanceReports->label())
+            ->assertSee(PermissionName::ManageAppraisalSettings->label());
+
+        $this->assertDatabaseHas('permissions', ['name' => PermissionName::ViewPerformanceReports->value]);
+        $this->assertDatabaseHas('permissions', ['name' => PermissionName::ManageAppraisalSettings->value]);
     }
 
     public function test_admin_can_update_role_permissions(): void
@@ -126,7 +146,8 @@ class RoleManagementTest extends TestCase
         $this->actingAs($settingsUser)
             ->get(route('admin.settings.appraisal'))
             ->assertOk()
-            ->assertSee('Post-manager mail recipients');
+            ->assertSee('HR evaluation report mail recipients')
+            ->assertDontSee('Post-manager mail recipients');
 
         $this->actingAs(User::factory()->create())
             ->get(route('admin.settings.appraisal'))
@@ -142,7 +163,6 @@ class RoleManagementTest extends TestCase
 
         $this->actingAs($settingsUser)
             ->put(route('admin.settings.appraisal.update'), [
-                'evaluator_ids' => [],
                 'theme_mode' => 'dark',
                 'sidebar_collapsed' => '1',
                 'report_recipient_emails' => "director@example.com,\nhr@example.com",

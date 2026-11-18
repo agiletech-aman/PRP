@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\RoleRequest;
 use App\Models\Permission;
 use App\Models\Role;
+use App\PermissionName;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Str;
@@ -84,6 +85,13 @@ class RoleController extends Controller
      */
     private function permissionGroups(): \Illuminate\Support\Collection
     {
+        foreach (PermissionName::cases() as $permission) {
+            Permission::updateOrCreate(
+                ['name' => $permission->value],
+                ['label' => $permission->label(), 'group' => $permission->group()],
+            );
+        }
+
         return Permission::orderBy('id')->get()->groupBy('group');
     }
 
