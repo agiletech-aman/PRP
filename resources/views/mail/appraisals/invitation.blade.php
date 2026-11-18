@@ -6,14 +6,18 @@ Hi {{ $appraisal->employee->name }},
 Your performance appraisal is now open. Please rate yourself on each factor out of {{ \App\Models\Appraisal::MAX_RATING }}.
 
 @if ($appraisal->manager)
-Once you submit, your reporting manager **{{ $appraisal->manager->name }}** (in CC) will add their ratings on the same form.
+Once you submit, your reporting manager **{{ $appraisal->manager->name }}** will add their ratings on the same form.
 @endif
+
+Your login details:
+
+@include('mail.appraisals._credentials')
 
 <x-mail::button :url="$url">
 Open appraisal form
 </x-mail::button>
 
-You will be asked to sign in first. Use your Employee ID or email address and your portal password.
+Please keep your password private and change it from **My profile** after you sign in.
 
 Thanks,<br>
 {{ config('app.name') }}

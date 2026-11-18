@@ -11,13 +11,16 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Sent to the employee (with their reporting manager in CC) when HR opens an appraisal.
+ * Sent only to the employee when HR opens an appraisal, with their Employee ID and login password.
  */
 class AppraisalInvitationMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public Appraisal $appraisal) {}
+    /**
+     * @param  string|null  $plainPassword  A newly issued password, or null when the employee keeps their current one.
+     */
+    public function __construct(public Appraisal $appraisal, public ?string $plainPassword = null) {}
 
     /**
      * Get the message envelope.
@@ -25,11 +28,9 @@ class AppraisalInvitationMail extends Mailable
     public function envelope(): Envelope
     {
         $employee = $this->appraisal->employee;
-        $manager = $this->appraisal->manager;
 
         return new Envelope(
             to: [new Address($employee->email, $employee->name)],
-            cc: $manager ? [new Address($manager->email, $manager->name)] : [],
             subject: "{$this->appraisal->title}: please complete your self-appraisal",
         );
     }
@@ -43,6 +44,7 @@ class AppraisalInvitationMail extends Mailable
             markdown: 'mail.appraisals.invitation',
             with: [
                 'url' => route('admin.appraisals.show', $this->appraisal),
+                'recipient' => $this->appraisal->employee,
             ],
         );
     }

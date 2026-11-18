@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\AppraisalStatus;
+use App\Mail\AppraisalHrNoticeMail;
 use App\Mail\AppraisalInvitationMail;
+use App\Mail\AppraisalManagerNoticeMail;
 use App\Mail\AppraisalReadyForManagerMail;
 use App\Models\Appraisal;
 use App\Models\Department;
@@ -12,6 +14,7 @@ use App\Models\RatingFactor;
 use App\Models\User;
 use App\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
@@ -56,28 +59,101 @@ class AppraisalWorkflowTest extends TestCase
             ->assertSee('Ready');
     }
 
-    public function test_sending_creates_appraisal_and_mails_employee_with_manager_in_cc(): void
+    public function test_employee_manager_and_hr_each_get_their_own_mail_with_a_new_password(): void
     {
         Mail::fake();
-        $hr = User::factory()->admin()->create();
+        $admin = User::factory()->admin()->create();
+        $hr = User::factory()->withPermissions(PermissionName::SendAppraisals)->create();
         $employee = $this->employeeReadyForAppraisal();
+        $manager = $employee->manager;
 
-        $this->actingAs($hr)
+        $this->actingAs($admin)
             ->post(route('admin.appraisals.store'), ['title' => 'Annual Appraisal 2026', 'employee_ids' => [$employee->id]])
             ->assertRedirect(route('admin.appraisals.index'))
-            ->assertSessionHas('status', 'Appraisal mail sent to 1 employee.');
+            ->assertSessionHas('status', 'Appraisal mail sent to 1 employee, their managers and HR.');
 
         $appraisal = Appraisal::sole();
 
         $this->assertSame(AppraisalStatus::Pending, $appraisal->status);
-        $this->assertTrue($appraisal->manager->is($employee->manager));
+        $this->assertTrue($appraisal->manager->is($manager));
         $this->assertCount(2, $appraisal->ratings);
 
         Mail::assertSent(AppraisalInvitationMail::class, function (AppraisalInvitationMail $mail) use ($employee) {
+            $body = $mail->render();
+
             return $mail->hasTo($employee->email)
-                && $mail->hasCc($employee->manager->email)
-                && str_contains($mail->render(), route('admin.appraisals.show', $mail->appraisal));
+                && $mail->cc === []
+                && Hash::check($mail->plainPassword, $employee->fresh()->password)
+                && str_contains($body, $employee->employee_code)
+                && str_contains($body, $mail->plainPassword)
+                && str_contains($body, route('admin.appraisals.show', $mail->appraisal));
         });
+
+        Mail::assertSent(AppraisalManagerNoticeMail::class, function (AppraisalManagerNoticeMail $mail) use ($manager) {
+            return $mail->hasTo($manager->email)
+                && Hash::check($mail->plainPassword, $manager->fresh()->password)
+                && str_contains($mail->render(), $manager->employee_code);
+        });
+
+        Mail::assertSent(AppraisalHrNoticeMail::class, function (AppraisalHrNoticeMail $mail) use ($hr, $employee) {
+            $body = $mail->render();
+
+            return $mail->hasTo($hr->email)
+                && Hash::check($mail->plainPassword, $hr->fresh()->password)
+                && str_contains($body, $hr->employee_code)
+                && str_contains($body, $employee->name);
+        });
+
+        Mail::assertNotSent(AppraisalHrNoticeMail::class, fn (AppraisalHrNoticeMail $mail) => $mail->hasTo($admin->email));
+        $this->assertTrue(Hash::check('password', $admin->fresh()->password));
+    }
+
+    public function test_a_manager_of_several_employees_gets_one_password_per_batch(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->admin()->create();
+        $first = $this->employeeReadyForAppraisal();
+        $second = User::factory()->create(['department_id' => $first->department_id, 'manager_id' => $first->manager_id]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.appraisals.store'), ['title' => 'Annual Appraisal 2026', 'employee_ids' => [$first->id, $second->id]]);
+
+        $passwords = Mail::sent(AppraisalManagerNoticeMail::class)->map(fn (AppraisalManagerNoticeMail $mail) => $mail->plainPassword)->unique();
+
+        $this->assertCount(1, $passwords);
+        $this->assertTrue(Hash::check($passwords->first(), $first->manager->fresh()->password));
+    }
+
+    public function test_sender_keeps_their_password_when_they_are_the_manager(): void
+    {
+        Mail::fake();
+        $hr = User::factory()->withPermissions(PermissionName::SendAppraisals)->create();
+        $employee = $this->employeeReadyForAppraisal();
+        $employee->update(['manager_id' => $hr->id]);
+
+        $this->actingAs($hr)
+            ->post(route('admin.appraisals.store'), ['title' => 'Annual Appraisal 2026', 'employee_ids' => [$employee->id]]);
+
+        $this->assertTrue(Hash::check('password', $hr->fresh()->password));
+        Mail::assertSent(AppraisalManagerNoticeMail::class, fn (AppraisalManagerNoticeMail $mail) => $mail->plainPassword === null
+            && str_contains($mail->render(), 'use your current portal password'));
+    }
+
+    public function test_manager_password_is_kept_when_their_mail_fails(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $employee = $this->employeeReadyForAppraisal();
+
+        Mail::shouldReceive('send')->once()->ordered();
+        Mail::shouldReceive('send')->once()->ordered()->andThrow(new TransportException('Connection refused'));
+
+        $this->actingAs($admin)
+            ->post(route('admin.appraisals.store'), ['title' => 'Annual Appraisal 2026', 'employee_ids' => [$employee->id]])
+            ->assertSessionHasErrors('employee_ids');
+
+        $this->assertDatabaseCount('appraisals', 1);
+        $this->assertFalse(Hash::check('password', $employee->fresh()->password));
+        $this->assertTrue(Hash::check('password', $employee->manager->fresh()->password));
     }
 
     public function test_employee_without_manager_cannot_be_sent_an_appraisal(): void

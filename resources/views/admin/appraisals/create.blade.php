@@ -1,4 +1,4 @@
-<x-layouts.admin title="Send appraisal" subtitle="The mail goes to each employee, with their reporting manager in CC">
+<x-layouts.admin title="Send appraisal" subtitle="The employee, their reporting manager and HR each get their own mail with a new login password">
     <a href="{{ route('admin.appraisals.index') }}" class="back-link"><x-icon name="arrow-left" /> All appraisals</a>
 
     <div class="toolbar">
@@ -35,7 +35,7 @@
                         <th class="select-col">
                             <input type="checkbox" id="select-all" aria-label="Select all eligible employees">
                         </th>
-                        <th>Employee</th><th>Department</th><th>Reporting manager (CC)</th><th>Can send?</th>
+                        <th>Employee</th><th>Department</th><th>Reporting manager</th><th>Can send?</th>
                     </tr>
                 </thead>
                 <tbody>
