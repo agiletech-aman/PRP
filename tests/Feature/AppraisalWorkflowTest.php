@@ -13,6 +13,7 @@ use App\Models\User;
 use App\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
 class AppraisalWorkflowTest extends TestCase
@@ -92,6 +93,22 @@ class AppraisalWorkflowTest extends TestCase
 
         $this->assertDatabaseCount('appraisals', 0);
         Mail::assertNothingSent();
+    }
+
+    public function test_no_appraisal_is_left_behind_when_the_mail_fails(): void
+    {
+        Mail::shouldReceive('send')->once()->andThrow(new TransportException('Connection could not be established with host "mailpit:1025"'));
+        $hr = User::factory()->admin()->create();
+        $employee = $this->employeeReadyForAppraisal();
+
+        $this->actingAs($hr)
+            ->from(route('admin.appraisals.create'))
+            ->post(route('admin.appraisals.store'), ['title' => 'Annual Appraisal 2026', 'employee_ids' => [$employee->id]])
+            ->assertRedirect(route('admin.appraisals.create'))
+            ->assertSessionHasErrors('employee_ids');
+
+        $this->assertDatabaseCount('appraisals', 0);
+        $this->assertDatabaseCount('appraisal_ratings', 0);
     }
 
     public function test_employee_with_open_appraisal_cannot_be_sent_another(): void

@@ -11,9 +11,11 @@ use App\Models\Department;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 /**
  * HR side of appraisals: track every appraisal and send new ones by mail.
@@ -76,21 +78,38 @@ class AppraisalController extends Controller
 
     /**
      * Open an appraisal for each selected employee and mail them, with their manager in CC.
+     *
+     * Each appraisal is only kept if its mail was sent. Sending stops at the first mail failure,
+     * since that almost always means the mail settings are wrong and every other mail would fail too.
      */
     public function store(SendAppraisalRequest $request): RedirectResponse
     {
-        $employees = $request->selectedEmployees();
+        $sentCount = 0;
 
-        foreach ($employees as $employee) {
-            $appraisal = Appraisal::startFor($employee, $request->validated('title'), $request->user());
+        foreach ($request->selectedEmployees() as $employee) {
+            try {
+                DB::transaction(function () use ($employee, $request) {
+                    $appraisal = Appraisal::startFor($employee, $request->validated('title'), $request->user());
 
-            Mail::send(new AppraisalInvitationMail($appraisal->load(['employee', 'manager'])));
+                    Mail::send(new AppraisalInvitationMail($appraisal->load(['employee', 'manager'])));
+                });
+            } catch (TransportExceptionInterface $exception) {
+                report($exception);
+
+                $redirect = $sentCount > 0
+                    ? redirect()->route('admin.appraisals.index')->with('status', "Appraisal mail sent to {$sentCount} ".Str::plural('employee', $sentCount).'.')
+                    : back()->withInput();
+
+                return $redirect->withErrors([
+                    'employee_ids' => "The appraisal mail to {$employee->name} could not be sent, so no appraisal was created for them or anyone after them. Please check the mail settings and try again.",
+                ]);
+            }
+
+            $sentCount++;
         }
-
-        $count = $employees->count();
 
         return redirect()
             ->route('admin.appraisals.index')
-            ->with('status', "Appraisal mail sent to {$count} ".Str::plural('employee', $count).'.');
+            ->with('status', "Appraisal mail sent to {$sentCount} ".Str::plural('employee', $sentCount).'.');
     }
 }
