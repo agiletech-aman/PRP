@@ -10,6 +10,7 @@ use App\Mail\EmployeeCredentialsMail;
 use App\Models\Department;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\EmployeeImportSpreadsheet;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
@@ -95,15 +97,12 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Download a CSV template for the bulk employee importer.
+     * Download an Excel template for the bulk employee importer.
      */
     public function downloadImportSample(Request $request): StreamedResponse
     {
         return response()->streamDownload(function () {
-            $output = fopen('php://output', 'w');
-            fwrite($output, "\xEF\xBB\xBF");
-            fputcsv($output, self::IMPORT_HEADERS);
-            fputcsv($output, [
+            echo EmployeeImportSpreadsheet::createSample(self::IMPORT_HEADERS, [
                 'EMP1001',
                 'Neha Verma',
                 'neha@example.com',
@@ -114,30 +113,45 @@ class EmployeeController extends Controller
                 '2026-01-15',
                 '1',
             ]);
-            fclose($output);
-        }, 'employee-import-sample.csv', [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+        }, 'employee-import-sample.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
 
     /**
-     * Import employees from a CSV file and mail each new account's login details.
+     * Import employees from an Excel or CSV file and mail each new account's login details.
      */
     public function import(ImportEmployeesRequest $request): RedirectResponse
     {
         $actor = $request->user();
-        $handle = fopen($request->file('file')->getRealPath(), 'r');
+        $file = $request->file('file');
 
-        if ($handle === false) {
-            return back()->withErrors(['file' => 'The CSV file could not be read.']);
+        if (strtolower($file->getClientOriginalExtension()) === 'xlsx') {
+            try {
+                $tableRows = EmployeeImportSpreadsheet::read($file->getRealPath());
+            } catch (RuntimeException $exception) {
+                return back()->withErrors(['file' => $exception->getMessage()]);
+            }
+        } else {
+            $handle = fopen($file->getRealPath(), 'r');
+
+            if ($handle === false) {
+                return back()->withErrors(['file' => 'The CSV file could not be read.']);
+            }
+
+            $tableRows = [];
+
+            while (($values = fgetcsv($handle)) !== false) {
+                $tableRows[] = $values;
+            }
+
+            fclose($handle);
         }
 
-        $header = fgetcsv($handle);
+        $header = array_shift($tableRows);
 
-        if ($header === false) {
-            fclose($handle);
-
-            return back()->withErrors(['file' => 'The CSV file is empty.']);
+        if (! is_array($header)) {
+            return back()->withErrors(['file' => 'The uploaded file is empty.']);
         }
 
         $header = array_map(function ($column) {
@@ -150,9 +164,7 @@ class EmployeeController extends Controller
         $missingHeaders = array_values(array_diff(self::IMPORT_HEADERS, $header));
 
         if ($missingHeaders !== []) {
-            fclose($handle);
-
-            return back()->withErrors(['file' => 'Missing CSV columns: '.implode(', ', $missingHeaders).'.']);
+            return back()->withErrors(['file' => 'Missing columns: '.implode(', ', $missingHeaders).'.']);
         }
 
         $departments = Department::query()->get(['id', 'name'])->keyBy(fn (Department $department) => strtolower(trim($department->name)));
@@ -173,10 +185,10 @@ class EmployeeController extends Controller
         $seenEmails = [];
         $rowNumber = 1;
 
-        while (($values = fgetcsv($handle)) !== false) {
+        foreach ($tableRows as $values) {
             $rowNumber++;
 
-            if ($values === [null] || collect($values)->every(fn ($value) => trim((string) $value) === '')) {
+            if ($values === [] || collect($values)->every(fn ($value) => trim((string) $value) === '')) {
                 continue;
             }
 
@@ -257,8 +269,6 @@ class EmployeeController extends Controller
                 'is_active' => $row['is_active'] === '' ? true : $isActive,
             ];
         }
-
-        fclose($handle);
 
         foreach ($rows as $row) {
             $code = strtolower($row['employee_code']);

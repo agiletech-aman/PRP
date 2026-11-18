@@ -37,7 +37,7 @@
 
         @can(\App\PermissionName::ManageEmployees->value)
             <div class="toolbar-actions">
-                <a href="{{ route('admin.employees.import.sample') }}" class="btn btn-outline">Download sample CSV</a>
+                <a href="{{ route('admin.employees.import.sample') }}" class="btn btn-outline">Download sample Excel</a>
                 <button type="button" class="btn btn-outline" id="open-employee-import">Import employees</button>
                 <a href="{{ route('admin.employees.create') }}" class="btn btn-primary"><x-icon name="plus" /> Add employee</a>
             </div>
@@ -49,10 +49,10 @@
             <form method="POST" action="{{ route('admin.employees.import') }}" enctype="multipart/form-data">
                 @csrf
                 <h2 id="employee-import-title">Import employees</h2>
-                <p>Upload a CSV file with one employee per row. Use the downloaded sample format.</p>
+                <p>Upload an Excel workbook (.xlsx) with one employee per row. CSV files are also supported.</p>
                 <div class="field">
-                    <label for="employee-import-file">CSV file</label>
-                    <input id="employee-import-file" type="file" name="file" accept=".csv,text/csv" required>
+                    <label for="employee-import-file">Excel or CSV file</label>
+                    <input id="employee-import-file" type="file" name="file" accept=".xlsx,.csv,.txt" required>
                     @error('file')
                         @foreach ((array) $errors->get('file') as $error)
                             <div class="field-error">{{ $error }}</div>

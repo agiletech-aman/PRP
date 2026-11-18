@@ -24,7 +24,7 @@ class ImportEmployeesRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+            'file' => ['required', 'file', 'extensions:csv,txt,xlsx', 'max:5120'],
         ];
     }
 }

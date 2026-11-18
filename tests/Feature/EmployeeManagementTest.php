@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\Role;
 use App\Models\User;
 use App\PermissionName;
+use App\Support\EmployeeImportSpreadsheet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
@@ -57,7 +58,7 @@ class EmployeeManagementTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.employees.import.sample'))
             ->assertOk()
-            ->assertDownload('employee-import-sample.csv');
+            ->assertDownload('employee-import-sample.xlsx');
     }
 
     public function test_admin_can_import_employees_from_csv(): void
@@ -86,6 +87,30 @@ class EmployeeManagementTest extends TestCase
         $this->assertSame($role->id, $employee->role_id);
         $this->assertTrue($employee->is_active);
         Mail::assertSent(EmployeeCredentialsMail::class, 2);
+    }
+
+    public function test_admin_can_import_employees_from_excel_workbook(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->admin()->create();
+        Department::factory()->create(['name' => 'Engineering']);
+        $role = Role::where('name', 'Employee')->firstOrFail();
+        $workbook = EmployeeImportSpreadsheet::createSample(
+            ['employee_code', 'name', 'email', 'designation', 'department', 'role', 'manager_employee_code', 'joining_date', 'is_active'],
+            ['EMP4001', 'Asha Patel', 'asha.xlsx@example.com', 'Developer', 'Engineering', $role->name, '', '2026-04-15', '1'],
+        );
+        $file = UploadedFile::fake()->createWithContent('employees.xlsx', $workbook);
+
+        $this->actingAs($admin)
+            ->post(route('admin.employees.import'), ['file' => $file])
+            ->assertRedirect(route('admin.employees.index'))
+            ->assertSessionHas('status');
+
+        $this->assertDatabaseHas('users', [
+            'employee_code' => 'EMP4001',
+            'email' => 'asha.xlsx@example.com',
+        ]);
+        Mail::assertSent(EmployeeCredentialsMail::class, fn (EmployeeCredentialsMail $mail) => $mail->hasTo('asha.xlsx@example.com'));
     }
 
     public function test_employee_import_rejects_missing_manager_and_duplicate_rows(): void
