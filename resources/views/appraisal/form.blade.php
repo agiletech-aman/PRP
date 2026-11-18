@@ -4,6 +4,13 @@
     $employeeAverage = $appraisal->averageRating('employee');
     $managerAverage = $appraisal->averageRating('manager');
     $editableColumn = $stage ? $stage.'_rating' : null;
+    $visibleRatingStages = match ($role) {
+        'employee' => ['employee' => 'Employee Rating'],
+        'manager' => ['manager' => 'Manager Rating'],
+        default => ['employee' => 'Employee Rating', 'manager' => 'Manager Rating'],
+    };
+    $ratingAverages = ['employee' => $employeeAverage, 'manager' => $managerAverage];
+    $tableColumnCount = 2 + count($visibleRatingStages);
     $canAddHrRemarks = auth()->user()->can('addHrRemarks', $appraisal);
     $roleLabel = match ($role) {
         'employee' => 'Employee (self-rating)',
@@ -49,7 +56,7 @@
         <div class="card card-flush">
             <table class="table appraisal-table">
                 <thead>
-                    <tr class="appraisal-title"><th>Sr. No.</th><th colspan="3">Rating Factors Out of {{ $maxRating }} Rating.</th></tr>
+                    <tr class="appraisal-title"><th>Sr. No.</th><th colspan="{{ $tableColumnCount - 1 }}">Rating Factors Out of {{ $maxRating }} Rating.</th></tr>
                 </thead>
                 @php($serial = 0)
                 @forelse ($ratingsByCategory as $ratings)
@@ -57,24 +64,32 @@
                         <tr class="appraisal-heading">
                             <th>{{ $ratings->first()->category_code }}.</th>
                             <th>{{ $ratings->first()->category_name }}:</th>
-                            <th>Employee Rating</th>
-                            <th>Manager Rating</th>
+                            @foreach ($visibleRatingStages as $columnLabel)
+                                <th>{{ $columnLabel }}</th>
+                            @endforeach
                         </tr>
                         @foreach ($ratings as $rating)
                             <tr>
                                 <td class="center">{{ ++$serial }}</td>
                                 <td>{{ $rating->factor_name }}</td>
-                                @foreach (['employee_rating', 'manager_rating'] as $column)
+                                @foreach (array_keys($visibleRatingStages) as $ratingStage)
+                                    @php($column = $ratingStage.'_rating')
                                     <td @class(['center', 'has-error' => $column === $editableColumn && $errors->has("ratings.{$rating->id}")])>
                                         @if ($column === $editableColumn)
-                                            <select name="ratings[{{ $rating->id }}]" class="rating-select" required aria-label="Rating for {{ $rating->factor_name }}">
-                                                <option value="">Select</option>
-                                                @for ($value = 1; $value <= $maxRating; $value++)
-                                                    <option value="{{ $value }}" @selected((string) old("ratings.{$rating->id}") === (string) $value)>{{ $value }}</option>
+                                            <div class="star-rating" role="radiogroup" aria-label="Rating for {{ $rating->factor_name }}">
+                                                @for ($value = $maxRating; $value >= 1; $value--)
+                                                    <input type="radio" id="rating-{{ $rating->id }}-{{ $value }}" name="ratings[{{ $rating->id }}]" value="{{ $value }}" required @checked((string) old("ratings.{$rating->id}") === (string) $value)>
+                                                    <label for="rating-{{ $rating->id }}-{{ $value }}" title="{{ $value }} out of {{ $maxRating }}">&#9733;</label>
                                                 @endfor
-                                            </select>
+                                            </div>
+                                        @elseif (filled($rating->{$column}))
+                                            <span class="star-display" title="{{ $rating->{$column} }} out of {{ $maxRating }}" aria-label="{{ $rating->{$column} }} out of {{ $maxRating }}">
+                                                @for ($value = 1; $value <= $maxRating; $value++)
+                                                    <span @class(['filled' => $value <= $rating->{$column}])>&#9733;</span>
+                                                @endfor
+                                            </span>
                                         @else
-                                            <span class="rating-value">{{ $rating->{$column} ?? '—' }}</span>
+                                            <span class="rating-value">—</span>
                                         @endif
                                     </td>
                                 @endforeach
@@ -82,15 +97,16 @@
                         @endforeach
                     </tbody>
                 @empty
-                    <tbody><tr><td colspan="4" class="muted">This appraisal has no rating factors.</td></tr></tbody>
+                    <tbody><tr><td colspan="{{ $tableColumnCount }}" class="muted">This appraisal has no rating factors.</td></tr></tbody>
                 @endforelse
                 @if ($ratingsByCategory->isNotEmpty())
                     <tfoot>
                         <tr class="appraisal-total">
                             <td></td>
                             <td>Average rating</td>
-                            <td class="center">{{ $employeeAverage ?? '—' }}</td>
-                            <td class="center">{{ $managerAverage ?? '—' }}</td>
+                            @foreach (array_keys($visibleRatingStages) as $ratingStage)
+                                <td class="center">{{ $ratingAverages[$ratingStage] ?? '—' }}</td>
+                            @endforeach
                         </tr>
                     </tfoot>
                 @endif

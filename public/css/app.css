@@ -426,6 +426,16 @@ input:disabled { background: var(--bg); color: var(--muted); }
 .appraisal-table tbody tr:last-child td { border-bottom: 1px solid var(--border); }
 .appraisal-table .rating-select { height: 36px; max-width: 120px; margin: 0 auto; display: block; }
 .appraisal-table .rating-value { font-weight: 600; }
+.star-rating { display: inline-flex; flex-direction: row-reverse; gap: 2px; position: relative; }
+.star-rating input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.star-rating label { font-size: 26px; line-height: 1; color: var(--input-border); cursor: pointer; transition: color .1s, transform .1s; }
+.has-error .star-rating label { color: #f0b4b7; }
+.star-rating input:checked ~ label { color: #f5a623; }
+.star-rating:hover label { color: var(--input-border); }
+.star-rating label:hover, .star-rating label:hover ~ label { color: #f5a623; transform: scale(1.1); }
+.star-rating input:focus-visible + label { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+.star-display { display: inline-flex; gap: 2px; font-size: 20px; line-height: 1; color: var(--input-border); }
+.star-display .filled { color: #f5a623; }
 .appraisal-total td { background: #fff4b8; font-weight: 700; }
 
 /* ---------- Appraisals ---------- */
