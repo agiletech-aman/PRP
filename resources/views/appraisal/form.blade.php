@@ -115,11 +115,16 @@
 
         <div class="card">
             <div class="card-head"><h2>Remarks</h2><span class="muted small">Optional</span></div>
-            <div class="field-grid">
-                @foreach (array_intersect_key(['employee' => 'Employee remarks', 'manager' => 'Manager remarks'], $visibleRatingStages) as $commentStage => $label)
+            @php($visibleRemarkStages = array_intersect_key(['employee' => 'Employee remarks', 'manager' => 'Manager remarks'], $visibleRatingStages))
+            @php($remarkPlaceholders = [
+                'employee' => 'Describe how you worked on your projects this period: projects / tasks handled, your key contributions, achievements, challenges you solved and what you learned.',
+                'manager' => 'Share your feedback on the employee\'s work: quality of project delivery, strengths, areas to improve and goals for the next period.',
+            ])
+            <div @class(['field-grid', 'field-grid-single' => count($visibleRemarkStages) === 1])>
+                @foreach ($visibleRemarkStages as $commentStage => $label)
                     @if ($stage === $commentStage)
                         <x-field name="comments" :label="$label">
-                            <textarea id="comments" name="comments" rows="4" maxlength="2000" placeholder="Optional: add your remarks">{{ old('comments') }}</textarea>
+                            <textarea id="comments" name="comments" rows="5" maxlength="2000" placeholder="{{ $remarkPlaceholders[$commentStage] }}">{{ old('comments') }}</textarea>
                         </x-field>
                     @else
                         <div class="field">
