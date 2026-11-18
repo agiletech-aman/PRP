@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AppraisalController;
+use App\Http\Controllers\Admin\AppraisalReportController;
 use App\Http\Controllers\Admin\AppraisalReviewController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DepartmentController;
@@ -57,6 +58,14 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         ->middleware('can:'.PermissionName::ViewEmployees->value)
         ->name('employees.index');
 
+    Route::get('employees/import/sample', [EmployeeController::class, 'downloadImportSample'])
+        ->middleware('can:'.PermissionName::ManageEmployees->value)
+        ->name('employees.import.sample');
+
+    Route::post('employees/import', [EmployeeController::class, 'import'])
+        ->middleware('can:'.PermissionName::ManageEmployees->value)
+        ->name('employees.import');
+
     Route::resource('employees', EmployeeController::class)
         ->except(['index', 'show'])
         ->middleware('can:'.PermissionName::ManageEmployees->value);
@@ -85,6 +94,11 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::get('appraisals', [AppraisalController::class, 'index'])->name('appraisals.index');
         Route::get('appraisals/send', [AppraisalController::class, 'create'])->name('appraisals.create');
         Route::post('appraisals', [AppraisalController::class, 'store'])->name('appraisals.store');
+    });
+
+    Route::middleware('can:'.PermissionName::EvaluateAppraisals->value)->prefix('appraisal-reports')->name('appraisal-reports.')->group(function () {
+        Route::get('/', [AppraisalReportController::class, 'index'])->name('index');
+        Route::get('/export', [AppraisalReportController::class, 'export'])->name('export');
     });
 
     Route::get('my-appraisals', [AppraisalReviewController::class, 'index'])->name('appraisals.mine');

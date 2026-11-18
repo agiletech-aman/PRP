@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\AppraisalStatus;
 use App\Http\Requests\SaveHrRemarksRequest;
 use App\Http\Requests\SubmitAppraisalRatingsRequest;
+use App\Mail\AppraisalReadyForHrMail;
 use App\Mail\AppraisalReadyForManagerMail;
 use App\Models\Appraisal;
 use App\Models\User;
+use App\PermissionName;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -69,6 +72,9 @@ class AppraisalFormController extends Controller
         if ($stage === 'employee' && $appraisal->manager) {
             $this->mailManagerTheirTurn($appraisal->load(['employee', 'manager']));
         }
+        if ($stage === 'manager') {
+            $this->mailHrEvaluators($appraisal->load(['employee', 'manager']));
+        }
 
         return redirect()->route('appraisal.thank-you', $appraisal)->with('submitted', $stage);
     }
@@ -84,6 +90,9 @@ class AppraisalFormController extends Controller
             'hr_remarks' => $remarks,
             'hr_remarks_by' => $remarks === null ? null : $request->user()->id,
             'hr_remarked_at' => $remarks === null ? null : now(),
+            'status' => $remarks !== null && $appraisal->status === AppraisalStatus::AwaitingHr
+                ? AppraisalStatus::Completed
+                : $appraisal->status,
         ]);
 
         return redirect()->route('appraisal.thank-you', $appraisal)->with('submitted', 'hr');
@@ -131,5 +140,27 @@ class AppraisalFormController extends Controller
 
             Mail::send(new AppraisalReadyForManagerMail($appraisal, $plainPassword));
         });
+    }
+
+    private function mailHrEvaluators(Appraisal $appraisal): void
+    {
+        $evaluators = User::query()
+            ->where('is_active', true)
+            ->whereHas('role.permissions', fn ($query) => $query->where('name', PermissionName::EvaluateAppraisals->value))
+            ->orderBy('name')
+            ->get();
+
+        foreach ($evaluators as $evaluator) {
+            DB::transaction(function () use ($appraisal, $evaluator) {
+                $plainPassword = null;
+
+                if (! $evaluator->isSuperAdmin() && $evaluator->id !== $appraisal->sent_by) {
+                    $plainPassword = User::generatePassword();
+                    $evaluator->update(['password' => $plainPassword]);
+                }
+
+                Mail::send(new AppraisalReadyForHrMail($appraisal, $evaluator, $plainPassword));
+            });
+        }
     }
 }

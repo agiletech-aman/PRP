@@ -9,6 +9,7 @@ enum AppraisalStatus: string
 {
     case Pending = 'pending';
     case EmployeeSubmitted = 'employee_submitted';
+    case AwaitingHr = 'awaiting_hr';
     case Completed = 'completed';
 
     public function label(): string
@@ -16,6 +17,7 @@ enum AppraisalStatus: string
         return match ($this) {
             self::Pending => 'Awaiting employee',
             self::EmployeeSubmitted => 'Awaiting manager',
+            self::AwaitingHr => 'Awaiting HR evaluation',
             self::Completed => 'Completed',
         };
     }
@@ -28,6 +30,7 @@ enum AppraisalStatus: string
         return match ($this) {
             self::Pending => 'pill-warn',
             self::EmployeeSubmitted => 'pill-blue',
+            self::AwaitingHr => 'pill-warn',
             self::Completed => 'pill-green',
         };
     }

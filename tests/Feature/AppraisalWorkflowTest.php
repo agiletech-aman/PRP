@@ -6,6 +6,7 @@ use App\AppraisalStatus;
 use App\Mail\AppraisalHrNoticeMail;
 use App\Mail\AppraisalInvitationMail;
 use App\Mail\AppraisalManagerNoticeMail;
+use App\Mail\AppraisalReadyForHrMail;
 use App\Mail\AppraisalReadyForManagerMail;
 use App\Models\Appraisal;
 use App\Models\Department;
@@ -432,9 +433,43 @@ class AppraisalWorkflowTest extends TestCase
 
         $appraisal->refresh();
 
-        $this->assertSame(AppraisalStatus::Completed, $appraisal->status);
+        $this->assertSame(AppraisalStatus::AwaitingHr, $appraisal->status);
         $this->assertNotNull($appraisal->manager_submitted_at);
         $this->assertEquals(3.0, $appraisal->averageRating('manager'));
+    }
+
+    public function test_manager_completion_mails_all_users_with_hr_evaluation_permission(): void
+    {
+        Mail::fake();
+        $firstEvaluator = User::factory()->withPermissions(PermissionName::EvaluateAppraisals)->create();
+        $secondEvaluator = User::factory()->withPermissions(PermissionName::EvaluateAppraisals)->create();
+        $appraisal = Appraisal::factory()->employeeSubmitted()->withRatings(1)->create();
+
+        $this->actingAs($appraisal->manager)
+            ->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 3)])
+            ->assertRedirect(route('appraisal.thank-you', $appraisal));
+
+        $this->assertSame(AppraisalStatus::AwaitingHr, $appraisal->fresh()->status);
+        Mail::assertSent(AppraisalReadyForHrMail::class, 2);
+        Mail::assertSent(AppraisalReadyForHrMail::class, fn ($mail) => $mail->hasTo($firstEvaluator->email));
+        Mail::assertSent(AppraisalReadyForHrMail::class, fn ($mail) => $mail->hasTo($secondEvaluator->email));
+    }
+
+    public function test_hr_evaluation_permission_can_view_and_export_all_appraisal_reports(): void
+    {
+        $evaluator = User::factory()->withPermissions(PermissionName::EvaluateAppraisals)->create();
+        $appraisal = Appraisal::factory()->completed()->withRatings(1)->create(['title' => 'Export this appraisal']);
+
+        $this->actingAs($evaluator)
+            ->get(route('admin.appraisal-reports.index'))
+            ->assertOk()
+            ->assertSee('Performance Reports')
+            ->assertSee($appraisal->employee->name);
+
+        $this->actingAs($evaluator)
+            ->get(route('admin.appraisal-reports.export'))
+            ->assertOk()
+            ->assertDownload('appraisal-performance-report-'.now()->format('Y-m-d').'.csv');
     }
 
     public function test_employee_cannot_rate_again_after_submitting(): void

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ImportEmployeesRequest;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
 use App\Mail\EmployeeCredentialsMail;
@@ -15,12 +16,26 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class EmployeeController extends Controller
 {
     private const MAIL_FAILED_MESSAGE = 'The login details mail could not be sent. Please check the mail settings and try again.';
+
+    private const IMPORT_HEADERS = [
+        'employee_code',
+        'name',
+        'email',
+        'designation',
+        'department',
+        'role',
+        'manager_employee_code',
+        'joining_date',
+        'is_active',
+    ];
 
     /**
      * List employees; filter with ?search=, ?department=, ?role=, ?manager= (an id, or "none") and ?status=.
@@ -77,6 +92,266 @@ class EmployeeController extends Controller
             'employee' => new User(['is_active' => true]),
             ...$this->formOptions($request->user()),
         ]);
+    }
+
+    /**
+     * Download a CSV template for the bulk employee importer.
+     */
+    public function downloadImportSample(Request $request): StreamedResponse
+    {
+        return response()->streamDownload(function () {
+            $output = fopen('php://output', 'w');
+            fwrite($output, "\xEF\xBB\xBF");
+            fputcsv($output, self::IMPORT_HEADERS);
+            fputcsv($output, [
+                'EMP1001',
+                'Neha Verma',
+                'neha@example.com',
+                'Senior Developer',
+                'Engineering',
+                'Employee',
+                'EMP1000',
+                '2026-01-15',
+                '1',
+            ]);
+            fclose($output);
+        }, 'employee-import-sample.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    /**
+     * Import employees from a CSV file and mail each new account's login details.
+     */
+    public function import(ImportEmployeesRequest $request): RedirectResponse
+    {
+        $actor = $request->user();
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+
+        if ($handle === false) {
+            return back()->withErrors(['file' => 'The CSV file could not be read.']);
+        }
+
+        $header = fgetcsv($handle);
+
+        if ($header === false) {
+            fclose($handle);
+
+            return back()->withErrors(['file' => 'The CSV file is empty.']);
+        }
+
+        $header = array_map(function ($column) {
+            $column = trim((string) $column);
+            $column = preg_replace('/^\xEF\xBB\xBF/', '', $column);
+
+            return strtolower(str_replace([' ', '-'], '_', $column));
+        }, $header);
+
+        $missingHeaders = array_values(array_diff(self::IMPORT_HEADERS, $header));
+
+        if ($missingHeaders !== []) {
+            fclose($handle);
+
+            return back()->withErrors(['file' => 'Missing CSV columns: '.implode(', ', $missingHeaders).'.']);
+        }
+
+        $departments = Department::query()->get(['id', 'name'])->keyBy(fn (Department $department) => strtolower(trim($department->name)));
+        $roles = Role::query()
+            ->unless($actor->isSuperAdmin(), fn ($query) => $query->where('slug', '!=', Role::SUPER_ADMIN_SLUG))
+            ->get(['id', 'name', 'slug'])
+            ->keyBy(fn (Role $role) => strtolower(trim($role->name)));
+        $existingUsersByCode = User::query()->pluck('id', 'employee_code')
+            ->mapWithKeys(fn ($id, $code) => [strtolower(trim($code)) => (int) $id])
+            ->all();
+        $existingUsersByEmail = User::query()->pluck('id', 'email')
+            ->mapWithKeys(fn ($id, $email) => [strtolower(trim($email)) => (int) $id])
+            ->all();
+
+        $rows = [];
+        $rowErrors = [];
+        $seenCodes = [];
+        $seenEmails = [];
+        $rowNumber = 1;
+
+        while (($values = fgetcsv($handle)) !== false) {
+            $rowNumber++;
+
+            if ($values === [null] || collect($values)->every(fn ($value) => trim((string) $value) === '')) {
+                continue;
+            }
+
+            $row = [];
+
+            foreach (self::IMPORT_HEADERS as $headerName) {
+                $index = array_search($headerName, $header, true);
+                $row[$headerName] = $index !== false ? trim((string) ($values[$index] ?? '')) : '';
+            }
+
+            $rowPrefix = "Row {$rowNumber}";
+
+            if ($row['employee_code'] === '') {
+                $rowErrors[] = "{$rowPrefix}: Employee ID is required.";
+            } elseif (strlen($row['employee_code']) > 30) {
+                $rowErrors[] = "{$rowPrefix}: Employee ID must be 30 characters or less.";
+            } elseif (isset($seenCodes[strtolower($row['employee_code'])]) || isset($existingUsersByCode[strtolower($row['employee_code'])])) {
+                $rowErrors[] = "{$rowPrefix}: Employee ID {$row['employee_code']} already exists or is duplicated in the file.";
+            } else {
+                $seenCodes[strtolower($row['employee_code'])] = true;
+            }
+
+            if ($row['name'] === '') {
+                $rowErrors[] = "{$rowPrefix}: Name is required.";
+            } elseif (strlen($row['name']) > 255) {
+                $rowErrors[] = "{$rowPrefix}: Name must be 255 characters or less.";
+            }
+
+            if ($row['email'] === '') {
+                $rowErrors[] = "{$rowPrefix}: Email is required.";
+            } elseif (! filter_var($row['email'], FILTER_VALIDATE_EMAIL)) {
+                $rowErrors[] = "{$rowPrefix}: Email {$row['email']} is invalid.";
+            } elseif (isset($seenEmails[strtolower($row['email'])]) || isset($existingUsersByEmail[strtolower($row['email'])])) {
+                $rowErrors[] = "{$rowPrefix}: Email {$row['email']} already exists or is duplicated in the file.";
+            } else {
+                $seenEmails[strtolower($row['email'])] = true;
+            }
+
+            $department = $row['department'] === '' ? null : ($departments[strtolower($row['department'])] ?? null);
+
+            if ($row['department'] !== '' && $department === null) {
+                $rowErrors[] = "{$rowPrefix}: Department {$row['department']} does not exist.";
+            }
+
+            $role = $row['role'] === '' ? null : ($roles[strtolower($row['role'])] ?? null);
+
+            if ($row['role'] === '') {
+                $rowErrors[] = "{$rowPrefix}: Role is required.";
+            } elseif ($role === null) {
+                $rowErrors[] = "{$rowPrefix}: Role {$row['role']} does not exist or is not assignable.";
+            }
+
+            $joiningDate = null;
+
+            if ($row['joining_date'] !== '') {
+                $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $row['joining_date']);
+                $dateErrors = \DateTimeImmutable::getLastErrors();
+
+                if (! $parsedDate || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0)) || $parsedDate->format('Y-m-d') !== $row['joining_date']) {
+                    $rowErrors[] = "{$rowPrefix}: Joining date must use YYYY-MM-DD format.";
+                } else {
+                    $joiningDate = $parsedDate->format('Y-m-d');
+                }
+            }
+
+            $activeValue = strtolower($row['is_active']);
+            $isActive = in_array($activeValue, ['1', 'yes', 'true', 'active'], true);
+
+            if ($activeValue !== '' && ! in_array($activeValue, ['0', '1', 'yes', 'no', 'true', 'false', 'active', 'inactive'], true)) {
+                $rowErrors[] = "{$rowPrefix}: is_active must be 1/0, yes/no or active/inactive.";
+            }
+
+            $rows[] = [
+                ...$row,
+                'department_id' => $department?->id,
+                'role_id' => $role?->id,
+                'joining_date' => $joiningDate,
+                'is_active' => $row['is_active'] === '' ? true : $isActive,
+            ];
+        }
+
+        fclose($handle);
+
+        foreach ($rows as $row) {
+            $code = strtolower($row['employee_code']);
+            $managerCode = strtolower($row['manager_employee_code']);
+
+            if ($managerCode !== '' && $managerCode === $code) {
+                $rowErrors[] = "Row {$row['employee_code']}: An employee cannot report to themselves.";
+            }
+
+            if ($managerCode !== '' && ! isset($seenCodes[$managerCode]) && ! isset($existingUsersByCode[$managerCode])) {
+                $rowErrors[] = "Row {$row['employee_code']}: Reporting manager {$row['manager_employee_code']} was not found.";
+            }
+        }
+
+        $pendingManagerCodes = [];
+
+        foreach ($rows as $row) {
+            if ($row['manager_employee_code'] !== '') {
+                $pendingManagerCodes[strtolower($row['employee_code'])] = strtolower($row['manager_employee_code']);
+            }
+        }
+
+        foreach ($pendingManagerCodes as $startCode => $firstManagerCode) {
+            $currentCode = $firstManagerCode;
+            $visitedCodes = [$startCode];
+
+            while ($currentCode !== '' && isset($pendingManagerCodes[$currentCode])) {
+                if (in_array($currentCode, $visitedCodes, true)) {
+                    $rowErrors[] = "Employee {$startCode}: Reporting manager hierarchy contains a cycle.";
+                    break;
+                }
+
+                $visitedCodes[] = $currentCode;
+                $currentCode = $pendingManagerCodes[$currentCode] ?? '';
+            }
+        }
+
+        if ($rowErrors !== []) {
+            return back()->withErrors(['file' => $rowErrors])->withInput();
+        }
+
+        $importedCount = 0;
+
+        try {
+            DB::transaction(function () use ($rows, &$importedCount) {
+                $importedUsersByCode = [];
+
+                foreach ($rows as $row) {
+                    $plainPassword = User::generatePassword();
+                    $employee = User::create([
+                        'employee_code' => $row['employee_code'],
+                        'name' => $row['name'],
+                        'email' => $row['email'],
+                        'designation' => $row['designation'] ?: null,
+                        'department_id' => $row['department_id'],
+                        'role_id' => $row['role_id'],
+                        'manager_id' => null,
+                        'joining_date' => $row['joining_date'],
+                        'is_active' => $row['is_active'],
+                        'password' => $plainPassword,
+                    ]);
+
+                    Mail::send(new EmployeeCredentialsMail($employee, $plainPassword));
+                    $importedUsersByCode[strtolower($employee->employee_code)] = $employee;
+                    $importedCount++;
+                }
+
+                foreach ($rows as $row) {
+                    $managerCode = strtolower($row['manager_employee_code']);
+
+                    if ($managerCode === '') {
+                        continue;
+                    }
+
+                    $manager = $importedUsersByCode[$managerCode]
+                        ?? User::query()->whereRaw('LOWER(employee_code) = ?', [$managerCode])->first();
+
+                    if ($manager !== null) {
+                        $importedUsersByCode[strtolower($row['employee_code'])]->update(['manager_id' => $manager->id]);
+                    }
+                }
+            });
+        } catch (TransportExceptionInterface $exception) {
+            report($exception);
+
+            return back()->withErrors([
+                'file' => "Employee import stopped after {$importedCount} employees. Login mail delivery failed; check mail settings and try again.",
+            ]);
+        }
+
+        return redirect()
+            ->route('admin.employees.index')
+            ->with('status', "{$importedCount} ".Str::plural('employee', $importedCount).' imported and login credentials mailed.');
     }
 
     /**

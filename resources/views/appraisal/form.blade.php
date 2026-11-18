@@ -16,6 +16,7 @@
         'employee' => 'Employee (self-rating)',
         'manager' => 'Reporting manager',
         'hierarchy' => 'Reporting hierarchy (view only)',
+        'evaluator' => 'HR evaluator',
         'hr' => auth()->user()->isSuperAdmin() ? 'Admin (view only)' : 'HR',
         default => 'Viewer',
     };
@@ -47,7 +48,13 @@
     @elseif ($role === 'employee' && $appraisal->status === \App\AppraisalStatus::EmployeeSubmitted)
         <div class="alert alert-info">You have submitted your self-rating. Your manager will add their ratings next.</div>
     @elseif ($canAddHrRemarks)
-        <div class="alert alert-info">You can add optional HR remarks at the bottom of this form at any stage.</div>
+        <div class="alert alert-info">
+            @if ($appraisal->status === \App\AppraisalStatus::AwaitingHr)
+                Add your HR evaluation remarks and submit to complete this appraisal.
+            @else
+                You can update HR remarks at the bottom of this form.
+            @endif
+        </div>
     @endif
 
     <form id="appraisal-ratings-form" method="POST" action="{{ route('appraisal.submit', $appraisal) }}">
@@ -204,7 +211,9 @@
                 <textarea id="hr_remarks" name="hr_remarks" rows="4" maxlength="2000" placeholder="Optional: add HR remarks">{{ old('hr_remarks', $appraisal->hr_remarks) }}</textarea>
             </x-field>
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Save HR remarks</button>
+                <button type="submit" class="btn btn-primary">
+                    {{ $appraisal->status === \App\AppraisalStatus::AwaitingHr ? 'Submit HR evaluation' : 'Save HR remarks' }}
+                </button>
             </div>
         </form>
     @elseif (filled($appraisal->hr_remarks))

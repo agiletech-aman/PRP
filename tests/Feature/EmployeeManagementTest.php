@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\PermissionName;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Mailer\Exception\TransportException;
@@ -47,6 +48,65 @@ class EmployeeManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Aman Verma')
             ->assertDontSee('Someone Else');
+    }
+
+    public function test_admin_can_download_employee_import_sample(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->get(route('admin.employees.import.sample'))
+            ->assertOk()
+            ->assertDownload('employee-import-sample.csv');
+    }
+
+    public function test_admin_can_import_employees_from_csv(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->admin()->create();
+        $department = Department::factory()->create(['name' => 'Engineering']);
+        $role = Role::where('name', 'Employee')->firstOrFail();
+        $csv = implode("\n", [
+            'employee_code,name,email,designation,department,role,manager_employee_code,joining_date,is_active',
+            'EMP3001,Neha Verma,neha.import@example.com,Developer,Engineering,Employee,,2026-01-15,1',
+            'EMP3002,Ravi Kumar,ravi.import@example.com,QA Engineer,Engineering,Employee,EMP3001,2026-02-01,1',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('employees.csv', $csv);
+
+        $this->actingAs($admin)
+            ->post(route('admin.employees.import'), ['file' => $file])
+            ->assertRedirect(route('admin.employees.index'))
+            ->assertSessionHas('status');
+
+        $manager = User::where('employee_code', 'EMP3001')->firstOrFail();
+        $employee = User::where('employee_code', 'EMP3002')->firstOrFail();
+
+        $this->assertTrue($employee->manager->is($manager));
+        $this->assertSame($department->id, $employee->department_id);
+        $this->assertSame($role->id, $employee->role_id);
+        $this->assertTrue($employee->is_active);
+        Mail::assertSent(EmployeeCredentialsMail::class, 2);
+    }
+
+    public function test_employee_import_rejects_missing_manager_and_duplicate_rows(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Department::factory()->create(['name' => 'Engineering']);
+        Role::where('name', 'Employee')->firstOrFail();
+        $csv = implode("\n", [
+            'employee_code,name,email,designation,department,role,manager_employee_code,joining_date,is_active',
+            'EMP3001,Neha Verma,neha.import@example.com,Developer,Engineering,Employee,UNKNOWN,2026-01-15,1',
+            'EMP3001,Neha Copy,neha.copy@example.com,Developer,Engineering,Employee,,2026-01-15,1',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('employees.csv', $csv);
+
+        $this->actingAs($admin)
+            ->from(route('admin.employees.index'))
+            ->post(route('admin.employees.import'), ['file' => $file])
+            ->assertRedirect(route('admin.employees.index'))
+            ->assertSessionHasErrors('file');
+
+        $this->assertDatabaseMissing('users', ['employee_code' => 'EMP3001']);
     }
 
     public function test_admin_can_create_employee(): void

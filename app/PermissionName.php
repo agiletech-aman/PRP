@@ -15,6 +15,7 @@ enum PermissionName: string
     case ManageRatings = 'ratings.manage';
     case ManageRoles = 'roles.manage';
     case SendAppraisals = 'appraisals.send';
+    case EvaluateAppraisals = 'appraisals.evaluate';
 
     public function label(): string
     {
@@ -26,6 +27,7 @@ enum PermissionName: string
             self::ManageRatings => 'Manage rating headings, factors & KRA',
             self::ManageRoles => 'Manage roles & permissions',
             self::SendAppraisals => 'Send appraisal mails & track all appraisals',
+            self::EvaluateAppraisals => 'Receive HR evaluation mail, view ratings & export reports',
         };
     }
 
@@ -36,7 +38,7 @@ enum PermissionName: string
             self::ViewEmployees, self::ManageEmployees => 'Employees',
             self::ManageDepartments, self::ManageRatings => 'Appraisal setup',
             self::ManageRoles => 'Administration',
-            self::SendAppraisals => 'Appraisals',
+            self::SendAppraisals, self::EvaluateAppraisals => 'Appraisals',
         };
     }
 }

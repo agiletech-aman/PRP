@@ -36,9 +36,51 @@
         </form>
 
         @can(\App\PermissionName::ManageEmployees->value)
-            <a href="{{ route('admin.employees.create') }}" class="btn btn-primary"><x-icon name="plus" /> Add employee</a>
+            <div class="toolbar-actions">
+                <a href="{{ route('admin.employees.import.sample') }}" class="btn btn-outline">Download sample CSV</a>
+                <button type="button" class="btn btn-outline" id="open-employee-import">Import employees</button>
+                <a href="{{ route('admin.employees.create') }}" class="btn btn-primary"><x-icon name="plus" /> Add employee</a>
+            </div>
         @endcan
     </div>
+
+    @can(\App\PermissionName::ManageEmployees->value)
+        <dialog class="confirmation-modal import-modal" id="employee-import-modal" aria-labelledby="employee-import-title">
+            <form method="POST" action="{{ route('admin.employees.import') }}" enctype="multipart/form-data">
+                @csrf
+                <h2 id="employee-import-title">Import employees</h2>
+                <p>Upload a CSV file with one employee per row. Use the downloaded sample format.</p>
+                <div class="field">
+                    <label for="employee-import-file">CSV file</label>
+                    <input id="employee-import-file" type="file" name="file" accept=".csv,text/csv" required>
+                    @error('file')
+                        @foreach ((array) $errors->get('file') as $error)
+                            <div class="field-error">{{ $error }}</div>
+                        @endforeach
+                    @enderror
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline" id="cancel-employee-import">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Import employees</button>
+                </div>
+            </form>
+        </dialog>
+
+        <script>
+            const employeeImportModal = document.getElementById('employee-import-modal');
+            const openEmployeeImport = document.getElementById('open-employee-import');
+            const cancelEmployeeImport = document.getElementById('cancel-employee-import');
+
+            if (employeeImportModal && openEmployeeImport && cancelEmployeeImport) {
+                openEmployeeImport.addEventListener('click', () => employeeImportModal.showModal());
+                cancelEmployeeImport.addEventListener('click', () => employeeImportModal.close());
+            }
+
+            @if ($errors->has('file'))
+                employeeImportModal?.showModal();
+            @endif
+        </script>
+    @endcan
 
     <div class="card card-flush">
         <table class="table">

@@ -44,6 +44,11 @@
                     <x-icon name="target" class="nav-icon" /> Appraisals
                 </a>
             @endcan
+            @can(\App\PermissionName::EvaluateAppraisals->value)
+                <a href="{{ route('admin.appraisal-reports.index') }}" @class(['active' => request()->routeIs('admin.appraisal-reports.*')])>
+                    <x-icon name="chart" class="nav-icon" /> Performance Reports
+                </a>
+            @endcan
             @if ($currentUser->hasAppraisals())
                 <a href="{{ route('admin.appraisals.mine') }}" @class(['active' => request()->routeIs('admin.appraisals.mine')])>
                     <x-icon name="list" class="nav-icon" /> My Appraisals

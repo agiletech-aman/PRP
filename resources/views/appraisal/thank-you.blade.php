@@ -1,7 +1,7 @@
 @php
     $message = match ($submitted) {
         'employee' => ['Thank you for submitting your self-appraisal!', "Your ratings have been saved. Your reporting manager {$appraisal->manager?->name} has been notified to add their ratings."],
-        'manager' => ['Thank you for rating '.$appraisal->employee->name.'!', 'Your manager ratings have been saved and this appraisal is now complete.'],
+        'manager' => ['Thank you for rating '.$appraisal->employee->name.'!', 'Your manager ratings have been saved. The appraisal is now waiting for HR evaluation.'],
         'hr' => ['Thank you, HR remarks saved!', 'Your remarks on '.$appraisal->employee->name.'’s appraisal have been saved.'],
         default => ['Thank you!', 'Your response for this appraisal has been recorded.'],
     };

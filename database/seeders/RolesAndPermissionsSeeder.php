@@ -28,6 +28,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'permissions' => [
                 PermissionName::ViewDashboard, PermissionName::ViewEmployees, PermissionName::ManageEmployees,
                 PermissionName::ManageDepartments, PermissionName::ManageRatings, PermissionName::SendAppraisals,
+                PermissionName::EvaluateAppraisals,
             ],
         ],
         'manager' => [

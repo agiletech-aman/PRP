@@ -173,6 +173,7 @@ class Appraisal extends Model
         return match (true) {
             $user->id === $this->employee_id => 'employee',
             $user->id === $this->manager_id => 'manager',
+            $user->can(PermissionName::EvaluateAppraisals->value) => 'evaluator',
             $user->can(PermissionName::SendAppraisals->value) => 'hr',
             $user->managesInHierarchy($this->employee) => 'hierarchy',
             default => null,
@@ -194,7 +195,10 @@ class Appraisal extends Model
             $this->update([
                 "{$stage}_comments" => $comments,
                 "{$stage}_submitted_at" => now(),
-                'status' => $stage === 'employee' ? AppraisalStatus::EmployeeSubmitted : AppraisalStatus::Completed,
+                'status' => match ($stage) {
+                    'employee' => AppraisalStatus::EmployeeSubmitted,
+                    'manager' => AppraisalStatus::AwaitingHr,
+                },
             ]);
         });
     }

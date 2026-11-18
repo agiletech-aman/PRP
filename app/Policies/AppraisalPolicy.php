@@ -16,6 +16,7 @@ class AppraisalPolicy
         return $user->id === $appraisal->employee_id
             || $user->id === $appraisal->manager_id
             || $user->managesInHierarchy($appraisal->employee)
+            || $user->can(PermissionName::EvaluateAppraisals->value)
             || $user->can(PermissionName::SendAppraisals->value);
     }
 
@@ -34,7 +35,7 @@ class AppraisalPolicy
     public function addHrRemarks(User $user, Appraisal $appraisal): bool
     {
         return ! $user->isSuperAdmin()
-            && $user->can(PermissionName::SendAppraisals->value)
+            && ($user->can(PermissionName::EvaluateAppraisals->value) || $user->can(PermissionName::SendAppraisals->value))
             && $user->id !== $appraisal->employee_id;
     }
 }

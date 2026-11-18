@@ -106,6 +106,8 @@ input.is-invalid, .has-error input, .has-error select { border-color: var(--dang
 .confirmation-modal h2 { font-size: 18px; font-weight: 700; }
 .confirmation-modal p { margin: 10px 0 20px; color: var(--muted); line-height: 1.5; }
 .confirmation-modal .form-actions { justify-content: flex-end; }
+.toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.import-modal input[type="file"] { width: 100%; padding: 10px; border: 1px solid var(--input-border); border-radius: 8px; }
 
 /* ---------- Sectioned form card ---------- */
 .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-width: 980px; }
