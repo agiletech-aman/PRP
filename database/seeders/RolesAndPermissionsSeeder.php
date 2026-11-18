@@ -63,10 +63,13 @@ class RolesAndPermissionsSeeder extends Seeder
                 ['name' => $definition['name'], 'description' => $definition['description'], 'is_system' => $definition['is_system']],
             );
 
-            if ($definition['permissions'] !== [] && $role->permissions()->doesntExist()) {
-                $role->permissions()->sync(
-                    Permission::whereIn('name', array_map(fn (PermissionName $p) => $p->value, $definition['permissions']))->pluck('id'),
-                );
+            if ($definition['permissions'] !== []) {
+                $permissionIds = Permission::whereIn(
+                    'name',
+                    array_map(fn (PermissionName $permission) => $permission->value, $definition['permissions']),
+                )->pluck('id');
+
+                $role->permissions()->syncWithoutDetaching($permissionIds);
             }
         }
     }

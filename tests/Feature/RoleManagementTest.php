@@ -32,6 +32,8 @@ class RoleManagementTest extends TestCase
         $this->assertSame(count(PermissionName::cases()), Permission::count());
         $this->assertEqualsCanonicalizing(['admin', 'hr', 'manager', 'employee'], Role::pluck('slug')->all());
         $this->assertTrue(Role::where('slug', 'hr')->first()->hasPermission(PermissionName::ManageEmployees));
+        $this->assertTrue(Role::where('slug', 'hr')->first()->hasPermission(PermissionName::ViewPerformanceReports));
+        $this->assertTrue(Role::where('slug', 'hr')->first()->hasPermission(PermissionName::ManageAppraisalSettings));
     }
 
     public function test_admin_can_create_role_with_permissions(): void
