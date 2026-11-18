@@ -43,7 +43,7 @@ class AppraisalManagerNoticeMail extends Mailable
         return new Content(
             markdown: 'mail.appraisals.manager-notice',
             with: [
-                'url' => route('admin.appraisals.show', $this->appraisal),
+                'url' => route('appraisal.form', $this->appraisal),
                 'recipient' => $this->appraisal->manager,
             ],
         );

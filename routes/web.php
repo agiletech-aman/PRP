@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\RatingCategoryController;
 use App\Http\Controllers\Admin\RatingFactorController;
 use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\AppraisalFormController;
 use App\Http\Controllers\Auth\LoginController;
 use App\PermissionName;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,25 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
+
+/*
+ * Standalone appraisal form opened from the mail links: sign in, fill in your part, see a thank-you page.
+ */
+Route::prefix('appraisal/{appraisal}')
+    ->where(['appraisal' => '[0-9]+'])
+    ->name('appraisal.')
+    ->controller(AppraisalFormController::class)
+    ->group(function () {
+        Route::get('/', 'show')->name('form');
+        Route::get('login', 'login')->name('login');
+
+        Route::middleware('auth')->group(function () {
+            Route::put('/', 'submit')->name('submit');
+            Route::put('hr-remarks', 'saveHrRemarks')->name('hr-remarks');
+            Route::get('thank-you', 'thankYou')->name('thank-you');
+            Route::post('switch-user', 'switchUser')->name('switch-user');
+        });
+    });
 
 Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     Route::view('/no-access', 'admin.no-access')->name('no-access');
@@ -68,16 +88,6 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     });
 
     Route::get('my-appraisals', [AppraisalReviewController::class, 'index'])->name('appraisals.mine');
-    Route::get('appraisals/{appraisal}', [AppraisalReviewController::class, 'show'])
-        ->whereNumber('appraisal')
-        ->can('view', 'appraisal')
-        ->name('appraisals.show');
-    Route::put('appraisals/{appraisal}', [AppraisalReviewController::class, 'update'])
-        ->whereNumber('appraisal')
-        ->name('appraisals.update');
-    Route::put('appraisals/{appraisal}/hr-remarks', [AppraisalReviewController::class, 'updateHrRemarks'])
-        ->whereNumber('appraisal')
-        ->name('appraisals.hr-remarks');
 
     Route::resource('roles', RoleController::class)
         ->except(['show'])

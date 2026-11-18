@@ -86,7 +86,7 @@ class AppraisalWorkflowTest extends TestCase
                 && Hash::check($mail->plainPassword, $employee->fresh()->password)
                 && str_contains($body, $employee->employee_code)
                 && str_contains($body, $mail->plainPassword)
-                && str_contains($body, route('admin.appraisals.show', $mail->appraisal));
+                && str_contains($body, route('appraisal.form', $mail->appraisal));
         });
 
         Mail::assertSent(AppraisalManagerNoticeMail::class, function (AppraisalManagerNoticeMail $mail) use ($manager) {
@@ -205,17 +205,89 @@ class AppraisalWorkflowTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_mail_link_sends_guest_to_login_then_back_to_the_form(): void
+    public function test_mail_link_opens_the_appraisal_sign_in_page_then_the_form(): void
     {
-        $appraisal = Appraisal::factory()->withRatings()->create();
-        $formUrl = route('admin.appraisals.show', $appraisal);
+        $appraisal = Appraisal::factory()->withRatings()->create(['title' => 'Annual Appraisal 2026']);
+        $formUrl = route('appraisal.form', $appraisal);
 
-        $this->get($formUrl)->assertRedirect(route('login'));
+        $this->get($formUrl)->assertRedirect(route('appraisal.login', $appraisal));
 
-        $this->post(route('login.store'), ['login' => $appraisal->employee->email, 'password' => 'password'])
+        $this->get(route('appraisal.login', $appraisal))
+            ->assertOk()
+            ->assertSee('Sign in to open your appraisal form')
+            ->assertSee('Annual Appraisal 2026')
+            ->assertDontSee('class="sidebar"', false);
+
+        $this->post(route('login.store'), ['login' => $appraisal->employee->employee_code, 'password' => 'password'])
             ->assertRedirect($formUrl);
 
         $this->assertAuthenticatedAs($appraisal->employee);
+
+        $this->get($formUrl)
+            ->assertOk()
+            ->assertSee('Employee (self-rating)')
+            ->assertDontSee('class="sidebar"', false);
+    }
+
+    public function test_wrong_password_on_appraisal_sign_in_page_returns_there_with_an_error(): void
+    {
+        $appraisal = Appraisal::factory()->create();
+
+        $this->get(route('appraisal.login', $appraisal));
+
+        $this->from(route('appraisal.login', $appraisal))
+            ->post(route('login.store'), ['login' => $appraisal->employee->email, 'password' => 'wrong'])
+            ->assertRedirect(route('appraisal.login', $appraisal))
+            ->assertSessionHasErrors('login');
+
+        $this->assertGuest();
+    }
+
+    public function test_form_shows_the_part_for_whoever_signed_in(): void
+    {
+        $hr = User::factory()->withPermissions(PermissionName::SendAppraisals)->create();
+        $appraisal = Appraisal::factory()->employeeSubmitted()->withRatings(2)->create();
+
+        $this->actingAs($appraisal->employee)->get(route('appraisal.form', $appraisal))
+            ->assertSee('Employee (self-rating)')
+            ->assertDontSee('Submit self-rating')
+            ->assertDontSee('name="ratings[', false);
+
+        $this->actingAs($appraisal->manager)->get(route('appraisal.form', $appraisal))
+            ->assertSee('Reporting manager')
+            ->assertSee('Submit manager rating')
+            ->assertSee('name="ratings[', false);
+
+        $this->actingAs($hr)->get(route('appraisal.form', $appraisal))
+            ->assertSee('Save HR remarks')
+            ->assertDontSee('name="ratings[', false);
+    }
+
+    public function test_signed_in_user_who_is_not_part_of_the_appraisal_can_switch_user(): void
+    {
+        $appraisal = Appraisal::factory()->create();
+        $stranger = User::factory()->withPermissions(PermissionName::ViewEmployees)->create();
+
+        $this->actingAs($stranger)
+            ->get(route('appraisal.form', $appraisal))
+            ->assertForbidden()
+            ->assertSee('This appraisal form is not for you');
+
+        $this->post(route('appraisal.switch-user', $appraisal))
+            ->assertRedirect(route('appraisal.login', $appraisal));
+
+        $this->assertGuest();
+    }
+
+    public function test_thank_you_page_after_submitting(): void
+    {
+        $appraisal = Appraisal::factory()->withRatings(1)->create();
+
+        $this->actingAs($appraisal->employee)
+            ->followingRedirects()
+            ->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 5)])
+            ->assertOk()
+            ->assertSee('Thank you for submitting your self-appraisal!');
     }
 
     public function test_employee_with_no_permissions_but_an_appraisal_lands_on_my_appraisals(): void
@@ -249,14 +321,14 @@ class AppraisalWorkflowTest extends TestCase
         $appraisal = Appraisal::factory()->withRatings(2)->create();
 
         $this->actingAs($appraisal->employee)
-            ->get(route('admin.appraisals.show', $appraisal))
+            ->get(route('appraisal.form', $appraisal))
             ->assertOk()
             ->assertSee('Submit self-rating');
 
-        $this->put(route('admin.appraisals.update', $appraisal), [
+        $this->put(route('appraisal.submit', $appraisal), [
             'ratings' => $this->ratingsFor($appraisal, 4),
             'comments' => 'Delivered the billing module.',
-        ])->assertRedirect(route('admin.appraisals.show', $appraisal));
+        ])->assertRedirect(route('appraisal.thank-you', $appraisal));
 
         $appraisal->refresh();
 
@@ -274,7 +346,7 @@ class AppraisalWorkflowTest extends TestCase
         [$first, $second] = $appraisal->ratings->all();
 
         $this->actingAs($appraisal->employee)
-            ->put(route('admin.appraisals.update', $appraisal), ['ratings' => [$first->id => 6]])
+            ->put(route('appraisal.submit', $appraisal), ['ratings' => [$first->id => 6]])
             ->assertSessionHasErrors(["ratings.{$first->id}", "ratings.{$second->id}"]);
 
         $this->assertSame(AppraisalStatus::Pending, $appraisal->fresh()->status);
@@ -285,7 +357,7 @@ class AppraisalWorkflowTest extends TestCase
         $appraisal = Appraisal::factory()->withRatings(2)->create();
 
         $this->actingAs($appraisal->manager)
-            ->put(route('admin.appraisals.update', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 3)])
+            ->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 3)])
             ->assertForbidden();
     }
 
@@ -294,12 +366,12 @@ class AppraisalWorkflowTest extends TestCase
         $appraisal = Appraisal::factory()->employeeSubmitted()->withRatings(2)->create();
 
         $this->actingAs($appraisal->manager)
-            ->get(route('admin.appraisals.show', $appraisal))
+            ->get(route('appraisal.form', $appraisal))
             ->assertOk()
             ->assertSee('Submit manager rating');
 
-        $this->put(route('admin.appraisals.update', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 3)])
-            ->assertRedirect(route('admin.appraisals.show', $appraisal));
+        $this->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 3)])
+            ->assertRedirect(route('appraisal.thank-you', $appraisal));
 
         $appraisal->refresh();
 
@@ -313,7 +385,7 @@ class AppraisalWorkflowTest extends TestCase
         $appraisal = Appraisal::factory()->employeeSubmitted()->withRatings(1)->create();
 
         $this->actingAs($appraisal->employee)
-            ->put(route('admin.appraisals.update', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 5)])
+            ->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 5)])
             ->assertForbidden();
     }
 
@@ -322,7 +394,7 @@ class AppraisalWorkflowTest extends TestCase
         $appraisal = Appraisal::factory()->create();
 
         $this->actingAs(User::factory()->withPermissions(PermissionName::ViewEmployees)->create())
-            ->get(route('admin.appraisals.show', $appraisal))
+            ->get(route('appraisal.form', $appraisal))
             ->assertForbidden();
     }
 
@@ -332,8 +404,8 @@ class AppraisalWorkflowTest extends TestCase
         $appraisal = Appraisal::factory()->completed()->withRatings()->create();
 
         $this->actingAs($hr)
-            ->put(route('admin.appraisals.hr-remarks', $appraisal), ['hr_remarks' => 'Recommended for promotion.'])
-            ->assertRedirect(route('admin.appraisals.show', $appraisal));
+            ->put(route('appraisal.hr-remarks', $appraisal), ['hr_remarks' => 'Recommended for promotion.'])
+            ->assertRedirect(route('appraisal.thank-you', $appraisal));
 
         $appraisal->refresh();
 
@@ -342,7 +414,7 @@ class AppraisalWorkflowTest extends TestCase
         $this->assertNotNull($appraisal->hr_remarked_at);
 
         $this->actingAs($appraisal->employee)
-            ->get(route('admin.appraisals.show', $appraisal))
+            ->get(route('appraisal.form', $appraisal))
             ->assertSee('Recommended for promotion.')
             ->assertDontSee('Save HR remarks');
     }
@@ -352,7 +424,7 @@ class AppraisalWorkflowTest extends TestCase
         $hr = User::factory()->withPermissions(PermissionName::SendAppraisals)->create();
         $appraisal = Appraisal::factory()->create(['hr_remarks' => 'Old note', 'hr_remarks_by' => $hr->id, 'hr_remarked_at' => now()]);
 
-        $this->actingAs($hr)->put(route('admin.appraisals.hr-remarks', $appraisal), ['hr_remarks' => '']);
+        $this->actingAs($hr)->put(route('appraisal.hr-remarks', $appraisal), ['hr_remarks' => '']);
 
         $this->assertNull($appraisal->fresh()->hr_remarks);
         $this->assertNull($appraisal->fresh()->hr_remarks_by);
@@ -364,12 +436,12 @@ class AppraisalWorkflowTest extends TestCase
         $appraisal = Appraisal::factory()->withRatings()->create(['hr_remarks' => 'Strong performer.']);
 
         $this->actingAs($admin)
-            ->get(route('admin.appraisals.show', $appraisal))
+            ->get(route('appraisal.form', $appraisal))
             ->assertOk()
             ->assertSee('Strong performer.')
             ->assertDontSee('Save HR remarks');
 
-        $this->put(route('admin.appraisals.hr-remarks', $appraisal), ['hr_remarks' => 'Changed'])
+        $this->put(route('appraisal.hr-remarks', $appraisal), ['hr_remarks' => 'Changed'])
             ->assertForbidden();
 
         $this->assertSame('Strong performer.', $appraisal->fresh()->hr_remarks);
@@ -381,7 +453,7 @@ class AppraisalWorkflowTest extends TestCase
 
         foreach ([$appraisal->employee, $appraisal->manager] as $user) {
             $this->actingAs($user)
-                ->put(route('admin.appraisals.hr-remarks', $appraisal), ['hr_remarks' => 'Sneaky'])
+                ->put(route('appraisal.hr-remarks', $appraisal), ['hr_remarks' => 'Sneaky'])
                 ->assertForbidden();
         }
 
@@ -400,7 +472,7 @@ class AppraisalWorkflowTest extends TestCase
             ->assertSee('Completed')
             ->assertSeeInOrder(['<th>HR</th>', '10 Nov 2026'], false);
 
-        $this->get(route('admin.appraisals.show', $appraisal))
+        $this->get(route('appraisal.form', $appraisal))
             ->assertOk()
             ->assertDontSee('Submit self-rating');
     }

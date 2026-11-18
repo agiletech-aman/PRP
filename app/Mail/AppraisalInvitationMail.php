@@ -43,7 +43,7 @@ class AppraisalInvitationMail extends Mailable
         return new Content(
             markdown: 'mail.appraisals.invitation',
             with: [
-                'url' => route('admin.appraisals.show', $this->appraisal),
+                'url' => route('appraisal.form', $this->appraisal),
                 'recipient' => $this->appraisal->employee,
             ],
         );

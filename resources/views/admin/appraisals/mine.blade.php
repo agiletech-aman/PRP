@@ -22,9 +22,9 @@
                         <td>
                             <div class="actions">
                                 @if ($stage)
-                                    <a href="{{ route('admin.appraisals.show', $appraisal) }}" class="btn btn-primary btn-sm">Fill form</a>
+                                    <a href="{{ route('appraisal.form', $appraisal) }}" class="btn btn-primary btn-sm">Fill form</a>
                                 @else
-                                    <x-icon-link :href="route('admin.appraisals.show', $appraisal)" icon="eye" label="View" />
+                                    <x-icon-link :href="route('appraisal.form', $appraisal)" icon="eye" label="View" />
                                 @endif
                             </div>
                         </td>

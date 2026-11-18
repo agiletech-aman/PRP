@@ -40,7 +40,7 @@ class AppraisalReadyForManagerMail extends Mailable
         return new Content(
             markdown: 'mail.appraisals.ready-for-manager',
             with: [
-                'url' => route('admin.appraisals.show', $this->appraisal),
+                'url' => route('appraisal.form', $this->appraisal),
             ],
         );
     }

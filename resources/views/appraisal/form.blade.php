@@ -1,38 +1,55 @@
 @php
     $employee = $appraisal->employee;
+    $maxRating = \App\Models\Appraisal::MAX_RATING;
     $employeeAverage = $appraisal->averageRating('employee');
     $managerAverage = $appraisal->averageRating('manager');
     $editableColumn = $stage ? $stage.'_rating' : null;
+    $canAddHrRemarks = auth()->user()->can('addHrRemarks', $appraisal);
+    $roleLabel = match ($role) {
+        'employee' => 'Employee (self-rating)',
+        'manager' => 'Reporting manager',
+        'hr' => auth()->user()->isSuperAdmin() ? 'Admin (view only)' : 'HR',
+        default => 'Viewer',
+    };
 @endphp
 
-<x-layouts.admin :title="$appraisal->title" :subtitle="$employee->name.' · '.($appraisal->department?->name ?? $employee->department?->name ?? 'No department').' · ratings out of '.\App\Models\Appraisal::MAX_RATING">
-    <a href="{{ auth()->user()->can(\App\PermissionName::SendAppraisals->value) ? route('admin.appraisals.index') : route('admin.appraisals.mine') }}" class="back-link">
-        <x-icon name="arrow-left" /> Back to appraisals
-    </a>
-
-    <div class="stats">
-        <x-stat label="Status" :value="$appraisal->status->label()" :hint="'Sent '.($appraisal->sent_at?->format('d M Y') ?? '—')" />
-        <x-stat label="Employee" :value="$employee->name" :hint="$employee->employee_code.' · '.($employee->designation ?? '')" />
-        <x-stat label="Reporting manager" :value="$appraisal->manager?->name ?? '—'" :hint="$appraisal->manager?->designation" />
-        <x-stat label="Average (self / manager)" :value="($employeeAverage ?? '—').' / '.($managerAverage ?? '—')" />
+<x-layouts.form :title="$appraisal->title" :appraisal="$appraisal">
+    <div class="form-page-head">
+        <div>
+            <h1 class="page-title">{{ $appraisal->title }}</h1>
+            <p class="page-subtitle">
+                {{ $employee->name }} ({{ $employee->employee_code }})
+                · {{ $appraisal->department?->name ?? $employee->department?->name ?? 'No department' }}
+                · Manager: {{ $appraisal->manager?->name ?? '—' }}
+            </p>
+        </div>
+        <div class="form-page-role">
+            <span class="muted small">Signed in as</span>
+            <span class="pill pill-blue">{{ $roleLabel }}</span>
+            <span class="pill {{ $appraisal->status->pillClass() }}">{{ $appraisal->status->label() }}</span>
+        </div>
     </div>
 
     @if ($stage === 'employee')
-        <div class="alert alert-info">Rate yourself on every factor, then submit. Your manager will add their ratings after you.</div>
+        <div class="alert alert-info">Rate yourself on every factor from 1 to {{ $maxRating }}, add remarks if you like, then submit. Your manager will add their ratings after you.</div>
     @elseif ($stage === 'manager')
         <div class="alert alert-info">{{ $employee->name }} has submitted their self-rating. Add your manager rating for every factor, then submit.</div>
-    @elseif ($appraisal->status === \App\AppraisalStatus::Pending && auth()->id() === $appraisal->manager_id)
-        <div class="alert alert-info">Waiting for {{ $employee->name }} to submit their self-rating. You will get a mail when it is your turn.</div>
+    @elseif ($role === 'manager' && $appraisal->status === \App\AppraisalStatus::Pending)
+        <div class="alert alert-info">Waiting for {{ $employee->name }} to submit their self-rating. You will get a mail when it is your turn to rate.</div>
+    @elseif ($role === 'employee' && $appraisal->status === \App\AppraisalStatus::EmployeeSubmitted)
+        <div class="alert alert-info">You have submitted your self-rating. Your manager will add their ratings next.</div>
+    @elseif ($canAddHrRemarks)
+        <div class="alert alert-info">You can add optional HR remarks at the bottom of this form at any stage.</div>
     @endif
 
-    <form method="POST" action="{{ route('admin.appraisals.update', $appraisal) }}">
+    <form method="POST" action="{{ route('appraisal.submit', $appraisal) }}">
         @csrf
         @method('PUT')
 
         <div class="card card-flush">
             <table class="table appraisal-table">
                 <thead>
-                    <tr class="appraisal-title"><th>Sr. No.</th><th colspan="3">Rating Factors Out of {{ \App\Models\Appraisal::MAX_RATING }} Rating.</th></tr>
+                    <tr class="appraisal-title"><th>Sr. No.</th><th colspan="3">Rating Factors Out of {{ $maxRating }} Rating.</th></tr>
                 </thead>
                 @php($serial = 0)
                 @forelse ($ratingsByCategory as $ratings)
@@ -52,7 +69,7 @@
                                         @if ($column === $editableColumn)
                                             <select name="ratings[{{ $rating->id }}]" class="rating-select" required aria-label="Rating for {{ $rating->factor_name }}">
                                                 <option value="">Select</option>
-                                                @for ($value = 1; $value <= \App\Models\Appraisal::MAX_RATING; $value++)
+                                                @for ($value = 1; $value <= $maxRating; $value++)
                                                     <option value="{{ $value }}" @selected((string) old("ratings.{$rating->id}") === (string) $value)>{{ $value }}</option>
                                                 @endfor
                                             </select>
@@ -108,8 +125,8 @@
         @endif
     </form>
 
-    @can('addHrRemarks', $appraisal)
-        <form method="POST" action="{{ route('admin.appraisals.hr-remarks', $appraisal) }}" class="card">
+    @if ($canAddHrRemarks)
+        <form method="POST" action="{{ route('appraisal.hr-remarks', $appraisal) }}" class="card">
             @csrf
             @method('PUT')
             <div class="card-head">
@@ -125,7 +142,7 @@
                 <textarea id="hr_remarks" name="hr_remarks" rows="4" maxlength="2000" placeholder="Optional: add HR remarks">{{ old('hr_remarks', $appraisal->hr_remarks) }}</textarea>
             </x-field>
             <div class="form-actions">
-                <button type="submit" class="btn btn-outline">Save HR remarks</button>
+                <button type="submit" class="btn btn-primary">Save HR remarks</button>
             </div>
         </form>
     @elseif (filled($appraisal->hr_remarks))
@@ -134,4 +151,4 @@
             <p class="comment-text">{{ $appraisal->hr_remarks }}</p>
         </div>
     @endif
-</x-layouts.admin>
+</x-layouts.form>

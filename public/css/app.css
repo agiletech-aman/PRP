@@ -490,3 +490,33 @@ textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 
     .sticky-actions { margin: 16px -16px 0; padding: 12px 16px; }
     .auth-card { padding: 24px; }
 }
+
+/* ---------- Standalone appraisal form pages ---------- */
+.form-page { min-height: 100vh; background: var(--bg); }
+.form-topbar { background: var(--surface); border-bottom: 1px solid var(--border); }
+.form-topbar-inner { max-width: 1100px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.form-topbar-logo { height: 40px; width: auto; }
+.form-topbar-user { display: flex; align-items: center; gap: 10px; }
+.form-page-main { max-width: 1100px; margin: 0 auto; padding: 28px 24px 40px; }
+.form-page-main .sticky-actions { margin: 16px -24px 0; padding: 14px 24px; }
+.form-page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.form-page-role { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.form-login-card { margin: 40px auto; }
+.form-login-card h2 { margin-top: 12px; }
+.form-message-card { max-width: 560px; margin: 48px auto; text-align: center; padding: 36px 28px; }
+.form-message-card h1 { font-size: 22px; margin-bottom: 10px; }
+.form-message-card p { margin-bottom: 12px; }
+.form-message-icon {
+    width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; font-weight: 700; background: var(--success-bg); color: var(--success-text);
+}
+.form-message-icon-warn { background: #fdf0dc; color: #9a5b00; }
+.form-message-actions { display: flex; justify-content: center; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+
+@media (max-width: 760px) {
+    .form-topbar-inner { padding: 10px 16px; }
+    .form-topbar-user .user-chip-text { display: none; }
+    .form-page-main { padding: 20px 16px 32px; }
+    .form-page-main .sticky-actions { margin: 16px -16px 0; padding: 12px 16px; }
+}

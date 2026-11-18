@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\AppraisalStatus;
+use App\PermissionName;
 use Database\Factories\AppraisalFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -160,6 +161,19 @@ class Appraisal extends Model
         return match (true) {
             $this->status === AppraisalStatus::Pending && $user->id === $this->employee_id => 'employee',
             $this->status === AppraisalStatus::EmployeeSubmitted && $user->id === $this->manager_id => 'manager',
+            default => null,
+        };
+    }
+
+    /**
+     * How the user takes part in this appraisal: "employee", "manager", "hr" (sends appraisals), or null.
+     */
+    public function participantRoleFor(User $user): ?string
+    {
+        return match (true) {
+            $user->id === $this->employee_id => 'employee',
+            $user->id === $this->manager_id => 'manager',
+            $user->can(PermissionName::SendAppraisals->value) => 'hr',
             default => null,
         };
     }

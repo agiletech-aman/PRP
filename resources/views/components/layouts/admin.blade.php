@@ -45,7 +45,7 @@
                 </a>
             @endcan
             @if ($currentUser->hasAppraisals())
-                <a href="{{ route('admin.appraisals.mine') }}" @class(['active' => request()->routeIs('admin.appraisals.mine', 'admin.appraisals.show')])>
+                <a href="{{ route('admin.appraisals.mine') }}" @class(['active' => request()->routeIs('admin.appraisals.mine')])>
                     <x-icon name="list" class="nav-icon" /> My Appraisals
                 </a>
             @endif

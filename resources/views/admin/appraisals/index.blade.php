@@ -45,7 +45,7 @@
                         <td><span class="pill {{ $appraisal->status->pillClass() }}">{{ $appraisal->status->label() }}</span></td>
                         <td>
                             <div class="actions">
-                                <x-icon-link :href="route('admin.appraisals.show', $appraisal)" icon="eye" label="View" />
+                                <x-icon-link :href="route('appraisal.form', $appraisal)" icon="eye" label="View" />
                             </div>
                         </td>
                     </tr>
