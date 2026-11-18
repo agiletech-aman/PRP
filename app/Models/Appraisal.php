@@ -174,6 +174,7 @@ class Appraisal extends Model
             $user->id === $this->employee_id => 'employee',
             $user->id === $this->manager_id => 'manager',
             $user->can(PermissionName::SendAppraisals->value) => 'hr',
+            $user->managesInHierarchy($this->employee) => 'hierarchy',
             default => null,
         };
     }

@@ -15,6 +15,7 @@ class AppraisalPolicy
     {
         return $user->id === $appraisal->employee_id
             || $user->id === $appraisal->manager_id
+            || $user->managesInHierarchy($appraisal->employee)
             || $user->can(PermissionName::SendAppraisals->value);
     }
 

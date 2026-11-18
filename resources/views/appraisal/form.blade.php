@@ -6,7 +6,7 @@
     $editableColumn = $stage ? $stage.'_rating' : null;
     $visibleRatingStages = match ($role) {
         'employee' => ['employee' => 'Employee Rating'],
-        'manager' => ['manager' => 'Manager Rating'],
+        'manager', 'hierarchy' => ['employee' => 'Employee Rating', 'manager' => 'Manager Rating'],
         default => ['employee' => 'Employee Rating', 'manager' => 'Manager Rating'],
     };
     $ratingAverages = ['employee' => $employeeAverage, 'manager' => $managerAverage];
@@ -15,6 +15,7 @@
     $roleLabel = match ($role) {
         'employee' => 'Employee (self-rating)',
         'manager' => 'Reporting manager',
+        'hierarchy' => 'Reporting hierarchy (view only)',
         'hr' => auth()->user()->isSuperAdmin() ? 'Admin (view only)' : 'HR',
         default => 'Viewer',
     };
@@ -49,7 +50,7 @@
         <div class="alert alert-info">You can add optional HR remarks at the bottom of this form at any stage.</div>
     @endif
 
-    <form method="POST" action="{{ route('appraisal.submit', $appraisal) }}">
+    <form id="appraisal-ratings-form" method="POST" action="{{ route('appraisal.submit', $appraisal) }}">
         @csrf
         @method('PUT')
 
@@ -139,12 +140,52 @@
         @if ($stage)
             <div class="form-actions sticky-actions">
                 <span class="muted">Ratings cannot be changed after submitting.</span>
-                <button type="submit" class="btn btn-primary" onclick="return confirm('Submit your ratings? You cannot change them afterwards.')">
+                <button type="submit" class="btn btn-primary">
                     Submit {{ $stage === 'employee' ? 'self-rating' : 'manager rating' }}
                 </button>
             </div>
         @endif
     </form>
+
+    @if ($stage)
+        <dialog class="confirmation-modal" id="rating-confirmation" aria-labelledby="rating-confirmation-title">
+            <h2 id="rating-confirmation-title">Submit your ratings?</h2>
+            <p>You cannot change your ratings after submitting.</p>
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline" id="cancel-rating-submission" autofocus>Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-rating-submission">Confirm submission</button>
+            </div>
+        </dialog>
+
+        <script>
+            const ratingConfirmation = document.getElementById('rating-confirmation');
+            const cancelRatingSubmission = document.getElementById('cancel-rating-submission');
+            const confirmRatingSubmission = document.getElementById('confirm-rating-submission');
+            const appraisalRatingsForm = document.getElementById('appraisal-ratings-form');
+            let ratingSubmissionConfirmed = false;
+
+            if (ratingConfirmation && cancelRatingSubmission && confirmRatingSubmission && appraisalRatingsForm) {
+                appraisalRatingsForm.addEventListener('submit', (event) => {
+                    if (ratingSubmissionConfirmed) {
+                        ratingSubmissionConfirmed = false;
+
+                        return;
+                    }
+
+                    event.preventDefault();
+
+                    if (appraisalRatingsForm.reportValidity()) {
+                        ratingConfirmation.showModal();
+                    }
+                });
+                cancelRatingSubmission.addEventListener('click', () => ratingConfirmation.close());
+                confirmRatingSubmission.addEventListener('click', () => {
+                    ratingSubmissionConfirmed = true;
+                    appraisalRatingsForm.requestSubmit();
+                });
+            }
+        </script>
+    @endif
 
     @if ($canAddHrRemarks)
         <form method="POST" action="{{ route('appraisal.hr-remarks', $appraisal) }}" class="card">

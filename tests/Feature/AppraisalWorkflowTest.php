@@ -260,6 +260,8 @@ class AppraisalWorkflowTest extends TestCase
 
         $this->actingAs($appraisal->manager)->get(route('appraisal.form', $appraisal))
             ->assertSee('Reporting manager')
+            ->assertSee('Employee Rating')
+            ->assertSee('Manager Rating')
             ->assertSee('Submit manager rating')
             ->assertSee('name="ratings[', false);
 
@@ -320,6 +322,54 @@ class AppraisalWorkflowTest extends TestCase
         $this->assertTrue($ownAppraisal->employee->is($manager));
     }
 
+    public function test_higher_manager_can_view_nested_report_ratings_read_only(): void
+    {
+        $higherManager = User::factory()->create();
+        $manager = User::factory()->create(['manager_id' => $higherManager->id]);
+        $employee = User::factory()->create(['manager_id' => $manager->id]);
+        $appraisal = Appraisal::factory()->completed()->withRatings(1)->create([
+            'employee_id' => $employee->id,
+            'manager_id' => $manager->id,
+        ]);
+        $appraisal->ratings()->update(['employee_rating' => 4, 'manager_rating' => 3]);
+
+        $this->actingAs($higherManager)
+            ->get(route('appraisal.form', $appraisal))
+            ->assertOk()
+            ->assertSee('Reporting hierarchy (view only)')
+            ->assertSee('Employee Rating')
+            ->assertSee('Manager Rating')
+            ->assertSee('4 out of 5', false)
+            ->assertSee('3 out of 5', false)
+            ->assertDontSee('name="ratings[', false)
+            ->assertDontSee('Submit manager rating');
+
+        $this->put(route('appraisal.submit', $appraisal), ['ratings' => $this->ratingsFor($appraisal, 5)])
+            ->assertForbidden();
+    }
+
+    public function test_my_appraisals_includes_nested_reporting_hierarchy(): void
+    {
+        $higherManager = User::factory()->create();
+        $manager = User::factory()->create(['manager_id' => $higherManager->id]);
+        $employee = User::factory()->create(['manager_id' => $manager->id]);
+        $teamAppraisal = Appraisal::factory()->create([
+            'title' => 'Nested team review',
+            'employee_id' => $employee->id,
+            'manager_id' => $manager->id,
+        ]);
+        Appraisal::factory()->create(['title' => 'Unrelated review']);
+
+        $this->actingAs($higherManager)
+            ->get(route('admin.appraisals.mine'))
+            ->assertOk()
+            ->assertSee('Nested team review')
+            ->assertSee($employee->name)
+            ->assertDontSee('Unrelated review');
+
+        $this->assertTrue($higherManager->hasAppraisals());
+    }
+
     public function test_employee_submits_self_rating_and_manager_is_notified(): void
     {
         Mail::fake();
@@ -328,7 +378,9 @@ class AppraisalWorkflowTest extends TestCase
         $this->actingAs($appraisal->employee)
             ->get(route('appraisal.form', $appraisal))
             ->assertOk()
-            ->assertSee('Submit self-rating');
+            ->assertSee('Submit self-rating')
+            ->assertSee('Submit your ratings?')
+            ->assertDontSee('return confirm(');
 
         $this->put(route('appraisal.submit', $appraisal), [
             'ratings' => $this->ratingsFor($appraisal, 4),

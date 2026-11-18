@@ -97,6 +97,15 @@ input.is-invalid, .has-error input, .has-error select { border-color: var(--dang
 .checkbox input { width: 16px; height: 16px; accent-color: var(--primary); }
 
 .form-actions { display: flex; gap: 10px; margin-top: 8px; }
+.confirmation-modal {
+    width: min(440px, calc(100vw - 32px)); padding: 24px; margin: auto;
+    border: 1px solid var(--border); border-radius: 12px; color: var(--text);
+    background: var(--surface); box-shadow: 0 16px 48px rgba(0, 0, 0, .24);
+}
+.confirmation-modal::backdrop { background: rgba(30, 32, 38, .56); }
+.confirmation-modal h2 { font-size: 18px; font-weight: 700; }
+.confirmation-modal p { margin: 10px 0 20px; color: var(--muted); line-height: 1.5; }
+.confirmation-modal .form-actions { justify-content: flex-end; }
 
 /* ---------- Sectioned form card ---------- */
 .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-width: 980px; }

@@ -97,7 +97,62 @@ class User extends Authenticatable
      */
     public function hasAppraisals(): bool
     {
-        return once(fn (): bool => Appraisal::query()->involving($this)->exists());
+        return once(function (): bool {
+            if (Appraisal::query()->involving($this)->exists()) {
+                return true;
+            }
+
+            $reportingDescendantIds = $this->reportingDescendantIds();
+
+            return $reportingDescendantIds !== []
+                && Appraisal::query()->whereIn('employee_id', $reportingDescendantIds)->exists();
+        });
+    }
+
+    /**
+     * IDs of all employees reporting to this user, directly or through another manager.
+     *
+     * @return list<int>
+     */
+    public function reportingDescendantIds(): array
+    {
+        $managerIds = [(int) $this->getKey()];
+        $descendantIds = [];
+
+        while ($managerIds !== []) {
+            $managerIds = self::query()
+                ->whereIn('manager_id', $managerIds)
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+
+            $managerIds = array_values(array_diff($managerIds, [(int) $this->getKey()], $descendantIds));
+            array_push($descendantIds, ...$managerIds);
+        }
+
+        return $descendantIds;
+    }
+
+    /**
+     * Whether this user is a manager at any level above the given employee.
+     */
+    public function managesInHierarchy(User $employee): bool
+    {
+        $managerId = $employee->manager_id;
+        $visitedManagerIds = [(int) $employee->getKey()];
+
+        while ($managerId !== null && ! in_array((int) $managerId, $visitedManagerIds, true)) {
+            $managerId = (int) $managerId;
+
+            if ($managerId === (int) $this->getKey()) {
+                return true;
+            }
+
+            $visitedManagerIds[] = $managerId;
+            $managerId = self::query()->whereKey($managerId)->value('manager_id');
+        }
+
+        return false;
     }
 
     /**

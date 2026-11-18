@@ -18,9 +18,15 @@ class AppraisalReviewController extends Controller
      */
     public function index(Request $request): View
     {
+        $user = $request->user();
+        $reportingDescendantIds = $user->reportingDescendantIds();
+
         return view('admin.appraisals.mine', [
             'appraisals' => Appraisal::query()
-                ->involving($request->user())
+                ->where(function ($query) use ($user, $reportingDescendantIds) {
+                    $query->involving($user)
+                        ->orWhereIn('employee_id', $reportingDescendantIds);
+                })
                 ->with(['employee', 'manager'])
                 ->latest('sent_at')
                 ->latest('id')
