@@ -58,7 +58,10 @@ class EmployeeManagementTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.employees.import.sample'))
             ->assertOk()
-            ->assertDownload('employee-import-sample.xlsx');
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->assertHeader('Content-Disposition', 'attachment; filename="employee-import-sample.xlsx"')
+            ->assertHeader('Content-Length')
+            ->assertSee('PK', false);
     }
 
     public function test_admin_can_import_employees_from_csv(): void

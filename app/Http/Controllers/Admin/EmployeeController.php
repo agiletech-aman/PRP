@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use RuntimeException;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class EmployeeController extends Controller
@@ -99,22 +99,24 @@ class EmployeeController extends Controller
     /**
      * Download an Excel template for the bulk employee importer.
      */
-    public function downloadImportSample(Request $request): StreamedResponse
+    public function downloadImportSample(Request $request): Response
     {
-        return response()->streamDownload(function () {
-            echo EmployeeImportSpreadsheet::createSample(self::IMPORT_HEADERS, [
-                'EMP1001',
-                'Neha Verma',
-                'neha@example.com',
-                'Senior Developer',
-                'Engineering',
-                'Employee',
-                'EMP1000',
-                '2026-01-15',
-                '1',
-            ]);
-        }, 'employee-import-sample.xlsx', [
+        $workbook = EmployeeImportSpreadsheet::createSample(self::IMPORT_HEADERS, [
+            'EMP1001',
+            'Neha Verma',
+            'neha@example.com',
+            'Senior Developer',
+            'Engineering',
+            'Employee',
+            'EMP1000',
+            '2026-01-15',
+            '1',
+        ]);
+
+        return response($workbook, 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="employee-import-sample.xlsx"',
+            'Content-Length' => (string) strlen($workbook),
         ]);
     }
 
