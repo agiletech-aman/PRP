@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Appraisal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -23,7 +24,7 @@ class AppraisalReviewController extends Controller
 
         return view('admin.appraisals.mine', [
             'appraisals' => Appraisal::query()
-                ->where(function ($query) use ($user, $reportingDescendantIds) {
+                ->where(function (Builder $query) use ($user, $reportingDescendantIds) {
                     $query->involving($user)
                         ->orWhereIn('employee_id', $reportingDescendantIds);
                 })
