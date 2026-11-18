@@ -38,7 +38,7 @@
     </div>
 
     @if ($stage === 'employee')
-        <div class="alert alert-info">Rate yourself on every factor from 1 to {{ $maxRating }}, add remarks if you like, then submit. Your manager will add their ratings after you.</div>
+        <div class="alert alert-info">Rate yourself on every factor from 1 to {{ $maxRating }}, add remarks if you like, then submit.</div>
     @elseif ($stage === 'manager')
         <div class="alert alert-info">{{ $employee->name }} has submitted their self-rating. Add your manager rating for every factor, then submit.</div>
     @elseif ($role === 'manager' && $appraisal->status === \App\AppraisalStatus::Pending)
@@ -116,7 +116,7 @@
         <div class="card">
             <div class="card-head"><h2>Remarks</h2><span class="muted small">Optional</span></div>
             <div class="field-grid">
-                @foreach (['employee' => 'Employee remarks', 'manager' => 'Manager remarks'] as $commentStage => $label)
+                @foreach (array_intersect_key(['employee' => 'Employee remarks', 'manager' => 'Manager remarks'], $visibleRatingStages) as $commentStage => $label)
                     @if ($stage === $commentStage)
                         <x-field name="comments" :label="$label">
                             <textarea id="comments" name="comments" rows="4" maxlength="2000" placeholder="Optional: add your remarks">{{ old('comments') }}</textarea>
