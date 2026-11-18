@@ -23,7 +23,7 @@
             <thead>
                 <tr>
                     <th>Employee</th><th>Department</th><th>Manager</th><th>Self rating</th>
-                    <th>Manager rating</th><th>Status</th><th class="actions-col">Actions</th>
+                    <th>Manager rating</th><th>HR rating</th><th>Status</th><th class="actions-col">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -37,6 +37,7 @@
                         <td>{{ $appraisal->manager?->name ?? '—' }}</td>
                         <td>{{ $appraisal->averageRating('employee') ?? '—' }}</td>
                         <td>{{ $appraisal->averageRating('manager') ?? '—' }}</td>
+                        <td>{{ $appraisal->averageRating('hr') ?? '—' }}</td>
                         <td><span class="pill {{ $appraisal->status->pillClass() }}">{{ $appraisal->status->label() }}</span></td>
                         <td>
                             <div class="actions">
@@ -45,7 +46,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="7" class="empty">No appraisal reports found.</td></tr>
+                    <tr><td colspan="8" class="empty">No appraisal reports found.</td></tr>
                 @endforelse
             </tbody>
         </table>

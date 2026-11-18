@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\RatingCategoryController;
 use App\Http\Controllers\Admin\RatingFactorController;
 use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\AppraisalFormController;
 use App\Http\Controllers\Auth\LoginController;
 use App\PermissionName;
@@ -96,12 +97,17 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
         Route::post('appraisals', [AppraisalController::class, 'store'])->name('appraisals.store');
     });
 
-    Route::middleware('can:'.PermissionName::EvaluateAppraisals->value)->prefix('appraisal-reports')->name('appraisal-reports.')->group(function () {
+    Route::middleware('can:'.PermissionName::ViewPerformanceReports->value)->prefix('appraisal-reports')->name('appraisal-reports.')->group(function () {
         Route::get('/', [AppraisalReportController::class, 'index'])->name('index');
         Route::get('/export', [AppraisalReportController::class, 'export'])->name('export');
     });
 
     Route::get('my-appraisals', [AppraisalReviewController::class, 'index'])->name('appraisals.mine');
+
+    Route::middleware('can:'.PermissionName::ManageAppraisalSettings->value)->group(function () {
+        Route::get('settings/appraisal', [SettingsController::class, 'edit'])->name('settings.appraisal');
+        Route::put('settings/appraisal', [SettingsController::class, 'update'])->name('settings.appraisal.update');
+    });
 
     Route::resource('roles', RoleController::class)
         ->except(['show'])

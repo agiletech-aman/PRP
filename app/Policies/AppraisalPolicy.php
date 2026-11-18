@@ -17,6 +17,7 @@ class AppraisalPolicy
             || $user->id === $appraisal->manager_id
             || $user->managesInHierarchy($appraisal->employee)
             || $user->can(PermissionName::EvaluateAppraisals->value)
+            || $user->can(PermissionName::ViewPerformanceReports->value)
             || $user->can(PermissionName::SendAppraisals->value);
     }
 

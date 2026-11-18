@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\AppraisalStatus;
+use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Requests\SaveHrRemarksRequest;
 use App\Http\Requests\SubmitAppraisalRatingsRequest;
 use App\Mail\AppraisalReadyForHrMail;
 use App\Mail\AppraisalReadyForManagerMail;
 use App\Models\Appraisal;
+use App\Models\AppraisalSetting;
 use App\Models\User;
 use App\PermissionName;
 use Illuminate\Http\RedirectResponse;
@@ -90,9 +91,6 @@ class AppraisalFormController extends Controller
             'hr_remarks' => $remarks,
             'hr_remarks_by' => $remarks === null ? null : $request->user()->id,
             'hr_remarked_at' => $remarks === null ? null : now(),
-            'status' => $remarks !== null && $appraisal->status === AppraisalStatus::AwaitingHr
-                ? AppraisalStatus::Completed
-                : $appraisal->status,
         ]);
 
         return redirect()->route('appraisal.thank-you', $appraisal)->with('submitted', 'hr');
@@ -144,11 +142,19 @@ class AppraisalFormController extends Controller
 
     private function mailHrEvaluators(Appraisal $appraisal): void
     {
-        $evaluators = User::query()
-            ->where('is_active', true)
-            ->whereHas('role.permissions', fn ($query) => $query->where('name', PermissionName::EvaluateAppraisals->value))
-            ->orderBy('name')
-            ->get();
+        $configuredIds = AppraisalSetting::getJson(SettingsController::HR_EVALUATOR_IDS_KEY, null);
+
+        $evaluators = $configuredIds === null
+            ? User::query()
+                ->where('is_active', true)
+                ->whereHas('role.permissions', fn ($query) => $query->where('name', PermissionName::EvaluateAppraisals->value))
+                ->orderBy('name')
+                ->get()
+            : User::query()
+                ->where('is_active', true)
+                ->whereKey($configuredIds)
+                ->orderBy('name')
+                ->get();
 
         foreach ($evaluators as $evaluator) {
             DB::transaction(function () use ($appraisal, $evaluator) {

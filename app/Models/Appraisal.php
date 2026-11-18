@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 #[Fillable([
     'title', 'employee_id', 'manager_id', 'department_id', 'sent_by', 'status',
     'employee_comments', 'manager_comments', 'hr_remarks', 'hr_remarks_by', 'sent_at',
-    'employee_submitted_at', 'manager_submitted_at', 'hr_remarked_at',
+    'employee_submitted_at', 'manager_submitted_at', 'hr_submitted_at', 'hr_comments', 'hr_remarked_at',
 ])]
 class Appraisal extends Model
 {
@@ -41,6 +41,7 @@ class Appraisal extends Model
             'sent_at' => 'datetime',
             'employee_submitted_at' => 'datetime',
             'manager_submitted_at' => 'datetime',
+            'hr_submitted_at' => 'datetime',
             'hr_remarked_at' => 'datetime',
         ];
     }
@@ -161,6 +162,8 @@ class Appraisal extends Model
         return match (true) {
             $this->status === AppraisalStatus::Pending && $user->id === $this->employee_id => 'employee',
             $this->status === AppraisalStatus::EmployeeSubmitted && $user->id === $this->manager_id => 'manager',
+            $this->status === AppraisalStatus::AwaitingHr
+                && ($user->can(PermissionName::EvaluateAppraisals->value) || $user->isSuperAdmin()) => 'hr',
             default => null,
         };
     }
@@ -173,7 +176,7 @@ class Appraisal extends Model
         return match (true) {
             $user->id === $this->employee_id => 'employee',
             $user->id === $this->manager_id => 'manager',
-            $user->can(PermissionName::EvaluateAppraisals->value) => 'evaluator',
+            ($user->can(PermissionName::EvaluateAppraisals->value) || $user->isSuperAdmin()) => 'evaluator',
             $user->can(PermissionName::SendAppraisals->value) => 'hr',
             $user->managesInHierarchy($this->employee) => 'hierarchy',
             default => null,
@@ -198,6 +201,7 @@ class Appraisal extends Model
                 'status' => match ($stage) {
                     'employee' => AppraisalStatus::EmployeeSubmitted,
                     'manager' => AppraisalStatus::AwaitingHr,
+                    'hr' => AppraisalStatus::Completed,
                 },
             ]);
         });

@@ -65,7 +65,7 @@ class AppraisalReportController extends Controller
             fputcsv($output, [
                 'Employee Name', 'Employee Code', 'Department', 'Manager',
                 'Appraisal', 'Status', 'Self Rating', 'Manager Rating',
-                'HR Remarks', 'Sent Date', 'Completed Date',
+                'HR Rating', 'HR Remarks', 'Sent Date', 'Completed Date',
             ]);
 
             foreach ($appraisals as $appraisal) {
@@ -78,6 +78,7 @@ class AppraisalReportController extends Controller
                     $appraisal->status->label(),
                     $appraisal->averageRating('employee'),
                     $appraisal->averageRating('manager'),
+                    $appraisal->averageRating('hr'),
                     $appraisal->hr_remarks,
                     $appraisal->sent_at?->format('Y-m-d'),
                     $appraisal->manager_submitted_at?->format('Y-m-d'),

@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Admin\SettingsController;
+use App\Models\AppraisalSetting;
 use App\Models\Department;
 use App\Models\Permission;
 use App\Models\Role;
@@ -110,6 +112,54 @@ class RoleManagementTest extends TestCase
             ->assertSee(route('admin.employees.index'), false)
             ->assertDontSee(route('admin.roles.index'), false)
             ->assertDontSee(route('admin.categories.index'), false);
+    }
+
+    public function test_appraisal_settings_permission_controls_settings_page(): void
+    {
+        $settingsUser = User::factory()->withPermissions(
+            PermissionName::ManageAppraisalSettings,
+            PermissionName::ViewDashboard,
+        )->create();
+
+        $this->actingAs($settingsUser)
+            ->get(route('admin.settings.appraisal'))
+            ->assertOk()
+            ->assertSee('Post-manager mail recipients');
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('admin.settings.appraisal'))
+            ->assertForbidden();
+    }
+
+    public function test_user_can_save_dark_theme_and_collapsed_sidebar(): void
+    {
+        $settingsUser = User::factory()->withPermissions(
+            PermissionName::ManageAppraisalSettings,
+            PermissionName::ViewDashboard,
+        )->create();
+
+        $this->actingAs($settingsUser)
+            ->put(route('admin.settings.appraisal.update'), [
+                'evaluator_ids' => [],
+                'theme_mode' => 'dark',
+                'sidebar_collapsed' => '1',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(
+            'dark',
+            AppraisalSetting::get(SettingsController::themeKey($settingsUser->id), 'light'),
+        );
+        $this->assertSame(
+            '1',
+            AppraisalSetting::get(SettingsController::sidebarKey($settingsUser->id), '0'),
+        );
+
+        $this->actingAs($settingsUser)
+            ->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSee('data-theme="dark"', false)
+            ->assertSee('sidebar-collapsed', false);
     }
 
     public function test_deactivated_user_loses_access(): void

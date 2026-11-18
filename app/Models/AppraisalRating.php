@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'appraisal_id', 'rating_factor_id', 'category_code', 'category_name', 'factor_name',
-    'sort_order', 'employee_rating', 'manager_rating',
+    'sort_order', 'employee_rating', 'manager_rating', 'hr_rating',
 ])]
 class AppraisalRating extends Model
 {
@@ -28,6 +28,7 @@ class AppraisalRating extends Model
             'sort_order' => 'integer',
             'employee_rating' => 'integer',
             'manager_rating' => 'integer',
+            'hr_rating' => 'integer',
         ];
     }
 

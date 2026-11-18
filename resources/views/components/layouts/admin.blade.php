@@ -1,6 +1,10 @@
 @props(['title' => 'Dashboard', 'heading' => null, 'subtitle' => null])
 
-@php($currentUser = auth()->user())
+@php
+    $currentUser = auth()->user();
+    $themeMode = \App\Models\AppraisalSetting::get(\App\Http\Controllers\Admin\SettingsController::themeKey((int) $currentUser->id), 'light');
+    $sidebarCollapsed = \App\Models\AppraisalSetting::get(\App\Http\Controllers\Admin\SettingsController::sidebarKey((int) $currentUser->id), '0') === '1';
+@endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
@@ -12,7 +16,7 @@
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}">
 </head>
-<body class="app">
+<body data-theme="{{ $themeMode === 'dark' ? 'dark' : 'light' }}" @class(['app', 'sidebar-collapsed' => $sidebarCollapsed])>
     <aside class="sidebar">
         <a href="{{ auth()->user()->homeUrl() }}" class="sidebar-logo">
             <img src="{{ asset('logo.png') }}" alt="Agile Enhance Technologies" width="480" height="148">
@@ -44,7 +48,7 @@
                     <x-icon name="target" class="nav-icon" /> Appraisals
                 </a>
             @endcan
-            @can(\App\PermissionName::EvaluateAppraisals->value)
+            @can(\App\PermissionName::ViewPerformanceReports->value)
                 <a href="{{ route('admin.appraisal-reports.index') }}" @class(['active' => request()->routeIs('admin.appraisal-reports.*')])>
                     <x-icon name="chart" class="nav-icon" /> Performance Reports
                 </a>
@@ -57,6 +61,11 @@
             @can(\App\PermissionName::ManageRoles->value)
                 <a href="{{ route('admin.roles.index') }}" @class(['active' => request()->routeIs('admin.roles.*')])>
                     <x-icon name="shield" class="nav-icon" /> Roles &amp; Permissions
+                </a>
+            @endcan
+            @can(\App\PermissionName::ManageAppraisalSettings->value)
+                <a href="{{ route('admin.settings.appraisal') }}" @class(['active' => request()->routeIs('admin.settings.appraisal')])>
+                    <x-icon name="settings" class="nav-icon" /> Settings
                 </a>
             @endcan
         </nav>

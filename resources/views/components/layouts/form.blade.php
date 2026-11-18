@@ -1,6 +1,11 @@
 @props(['title', 'appraisal'])
 
-@php($currentUser = auth()->user())
+@php
+    $currentUser = auth()->user();
+    $themeMode = $currentUser
+        ? \App\Models\AppraisalSetting::get(\App\Http\Controllers\Admin\SettingsController::themeKey((int) $currentUser->id), 'light')
+        : 'light';
+@endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
@@ -12,7 +17,7 @@
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}">
 </head>
-<body class="form-page">
+<body class="form-page" data-theme="{{ $themeMode === 'dark' ? 'dark' : 'light' }}">
     <header class="form-topbar">
         <div class="form-topbar-inner">
             <img src="{{ asset('logo.png') }}" alt="Agile Enhance Technologies" class="form-topbar-logo" width="480" height="148">

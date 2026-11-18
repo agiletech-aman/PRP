@@ -3,13 +3,15 @@
     $maxRating = \App\Models\Appraisal::MAX_RATING;
     $employeeAverage = $appraisal->averageRating('employee');
     $managerAverage = $appraisal->averageRating('manager');
+    $hrAverage = $appraisal->averageRating('hr');
     $editableColumn = $stage ? $stage.'_rating' : null;
     $visibleRatingStages = match ($role) {
         'employee' => ['employee' => 'Employee Rating'],
         'manager', 'hierarchy' => ['employee' => 'Employee Rating', 'manager' => 'Manager Rating'],
+        'evaluator' => ['employee' => 'Employee Rating', 'manager' => 'Manager Rating', 'hr' => 'HR Rating'],
         default => ['employee' => 'Employee Rating', 'manager' => 'Manager Rating'],
     };
-    $ratingAverages = ['employee' => $employeeAverage, 'manager' => $managerAverage];
+    $ratingAverages = ['employee' => $employeeAverage, 'manager' => $managerAverage, 'hr' => $hrAverage];
     $tableColumnCount = 2 + count($visibleRatingStages);
     $canAddHrRemarks = auth()->user()->can('addHrRemarks', $appraisal);
     $roleLabel = match ($role) {
@@ -43,6 +45,8 @@
         <div class="alert alert-info">Rate yourself on every factor from 1 to {{ $maxRating }}, add remarks if you like, then submit.</div>
     @elseif ($stage === 'manager')
         <div class="alert alert-info">{{ $employee->name }} has submitted their self-rating. Add your manager rating for every factor, then submit.</div>
+    @elseif ($stage === 'hr')
+        <div class="alert alert-info">Add your HR rating for every factor and remarks, then submit. This will complete the appraisal.</div>
     @elseif ($role === 'manager' && $appraisal->status === \App\AppraisalStatus::Pending)
         <div class="alert alert-info">Waiting for {{ $employee->name }} to submit their self-rating. You will get a mail when it is your turn to rate.</div>
     @elseif ($role === 'employee' && $appraisal->status === \App\AppraisalStatus::EmployeeSubmitted)
@@ -123,10 +127,11 @@
 
         <div class="card">
             <div class="card-head"><h2>Remarks</h2><span class="muted small">Optional</span></div>
-            @php($visibleRemarkStages = array_intersect_key(['employee' => 'Employee remarks', 'manager' => 'Manager remarks'], $visibleRatingStages))
+            @php($visibleRemarkStages = array_intersect_key(['employee' => 'Employee remarks', 'manager' => 'Manager remarks', 'hr' => 'HR remarks'], $visibleRatingStages))
             @php($remarkPlaceholders = [
                 'employee' => 'Describe how you worked on your projects this period: projects / tasks handled, your key contributions, achievements, challenges you solved and what you learned.',
                 'manager' => 'Share your feedback on the employee\'s work: quality of project delivery, strengths, areas to improve and goals for the next period.',
+                'hr' => 'Share the HR evaluation, final feedback and recommendations.',
             ])
             <div @class(['field-grid', 'field-grid-single' => count($visibleRemarkStages) === 1])>
                 @foreach ($visibleRemarkStages as $commentStage => $label)
@@ -148,7 +153,7 @@
             <div class="form-actions sticky-actions">
                 <span class="muted">Ratings cannot be changed after submitting.</span>
                 <button type="submit" class="btn btn-primary">
-                    Submit {{ $stage === 'employee' ? 'self-rating' : 'manager rating' }}
+                    Submit {{ match ($stage) { 'employee' => 'self-rating', 'manager' => 'manager rating', 'hr' => 'HR rating', default => 'rating' } }}
                 </button>
             </div>
         @endif
