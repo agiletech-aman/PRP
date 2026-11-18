@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\SmtpTestMail;
 use App\Models\AppraisalSetting;
+use App\Support\SmtpSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class SettingsController extends Controller
 {
@@ -28,6 +32,7 @@ class SettingsController extends Controller
             'reportRecipients' => implode(",\n", AppraisalSetting::getJson(self::HR_REPORT_RECIPIENTS_KEY, [])),
             'themeMode' => AppraisalSetting::get(self::themeKey((int) auth()->id()), 'light'),
             'sidebarCollapsed' => AppraisalSetting::get(self::sidebarKey((int) auth()->id()), '0') === '1',
+            'smtpSettings' => SmtpSettings::formValues(),
         ]);
     }
 
@@ -58,5 +63,52 @@ class SettingsController extends Controller
         );
 
         return back()->with('status', 'Settings updated.');
+    }
+
+    public function updateSmtp(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'action' => ['required', 'in:save,test'],
+            'smtp_host' => ['required', 'string', 'max:255'],
+            'smtp_port' => ['required', 'integer', 'between:1,65535'],
+            'smtp_encryption' => ['required', 'in:tls,ssl'],
+            'smtp_username' => ['nullable', 'string', 'max:255'],
+            'smtp_password' => ['nullable', 'string', 'max:4096'],
+            'smtp_from_address' => ['required', 'email:rfc', 'max:255'],
+            'smtp_from_name' => ['required', 'string', 'max:255'],
+            'test_recipient' => ['required_if:action,test', 'nullable', 'email:rfc', 'max:255'],
+        ]);
+
+        if (($validated['smtp_username'] ?? '') !== '' && ($validated['smtp_password'] ?? '') === '' && ! SmtpSettings::hasStoredPassword()) {
+            return back()
+                ->withErrors(['smtp_password' => 'Enter the SMTP password for this username.'])
+                ->withInput($request->except('smtp_password'));
+        }
+
+        if (($validated['smtp_username'] ?? '') === '' && ($validated['smtp_password'] ?? '') !== '') {
+            return back()
+                ->withErrors(['smtp_username' => 'Enter an SMTP username when providing a password.'])
+                ->withInput($request->except('smtp_password'));
+        }
+
+        if ($validated['action'] === 'save') {
+            SmtpSettings::save($validated);
+
+            return back()->with('status', 'SMTP settings saved.');
+        }
+
+        SmtpSettings::applyInput($validated);
+
+        try {
+            Mail::to($validated['test_recipient'])->send(new SmtpTestMail);
+        } catch (TransportExceptionInterface|\InvalidArgumentException $exception) {
+            report($exception);
+
+            return back()
+                ->withErrors(['smtp' => 'The test email could not be sent. Check the SMTP host, port, encryption, and credentials.'])
+                ->withInput($request->except('smtp_password'));
+        }
+
+        return back()->with('status', 'SMTP test email sent successfully.');
     }
 }

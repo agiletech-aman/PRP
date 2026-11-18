@@ -1,5 +1,63 @@
-<x-layouts.admin title="Settings" subtitle="Configure report recipients and your portal theme">
+<x-layouts.admin title="Settings" subtitle="Configure email delivery, report recipients, and your portal theme">
     <a href="{{ route('admin.roles.index') }}" class="back-link">Roles &amp; Permissions</a>
+
+    <form method="POST" action="{{ route('admin.settings.smtp.update') }}">
+        @csrf
+
+        <div class="card card-narrow">
+            <div class="card-head">
+                <div>
+                    <h2>SMTP setup</h2>
+                    <p class="muted small">Configure the server used to send portal emails, then send a test email to verify it.</p>
+                </div>
+            </div>
+
+            @error('smtp')
+                <div class="alert alert-error">{{ $message }}</div>
+            @enderror
+
+            <x-field name="smtp_host" label="SMTP host" required>
+                <input id="smtp_host" type="text" name="smtp_host" value="{{ old('smtp_host', $smtpSettings['host']) }}" required>
+            </x-field>
+
+            <x-field name="smtp_port" label="SMTP port" required>
+                <input id="smtp_port" type="number" name="smtp_port" min="1" max="65535" value="{{ old('smtp_port', $smtpSettings['port']) }}" required>
+            </x-field>
+
+            <x-field name="smtp_encryption" label="Encryption" required>
+                <select id="smtp_encryption" name="smtp_encryption" required>
+                    <option value="tls" @selected(old('smtp_encryption', $smtpSettings['encryption']) === 'tls')>TLS (STARTTLS)</option>
+                    <option value="ssl" @selected(old('smtp_encryption', $smtpSettings['encryption']) === 'ssl')>SSL/TLS</option>
+                </select>
+            </x-field>
+
+            <x-field name="smtp_username" label="SMTP username">
+                <input id="smtp_username" type="text" name="smtp_username" value="{{ old('smtp_username', $smtpSettings['username']) }}" autocomplete="username">
+            </x-field>
+
+            <x-field name="smtp_password" label="SMTP password" :hint="$smtpSettings['passwordConfigured'] ? 'A password is saved. Leave this blank to keep it unchanged.' : 'The password is encrypted before it is saved.'">
+                <input id="smtp_password" type="password" name="smtp_password" autocomplete="new-password">
+            </x-field>
+
+            <x-field name="smtp_from_address" label="From email" required>
+                <input id="smtp_from_address" type="email" name="smtp_from_address" value="{{ old('smtp_from_address', $smtpSettings['fromAddress']) }}" required>
+            </x-field>
+
+            <x-field name="smtp_from_name" label="From name" required>
+                <input id="smtp_from_name" type="text" name="smtp_from_name" value="{{ old('smtp_from_name', $smtpSettings['fromName']) }}" required>
+            </x-field>
+
+            <x-field name="test_recipient" label="Test email recipient">
+                <input id="test_recipient" type="email" name="test_recipient" value="{{ old('test_recipient') }}" autocomplete="email">
+            </x-field>
+            <p class="field-hint">The test button checks the entered configuration without saving it.</p>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" name="action" value="save">Save SMTP settings</button>
+                <button type="submit" class="btn btn-outline" name="action" value="test">Send test email</button>
+            </div>
+        </div>
+    </form>
 
     <form method="POST" action="{{ route('admin.settings.appraisal.update') }}">
         @csrf

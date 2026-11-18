@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\Admin\SettingsController;
+use App\Mail\SmtpTestMail;
 use App\Models\AppraisalSetting;
 use App\Models\Department;
 use App\Models\Permission;
@@ -11,7 +12,9 @@ use App\Models\User;
 use App\PermissionName;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class RoleManagementTest extends TestCase
@@ -147,10 +150,16 @@ class RoleManagementTest extends TestCase
             ->get(route('admin.settings.appraisal'))
             ->assertOk()
             ->assertSee('HR evaluation report mail recipients')
+            ->assertSee('SMTP setup')
+            ->assertSee('Send test email')
             ->assertDontSee('Post-manager mail recipients');
 
         $this->actingAs(User::factory()->create())
             ->get(route('admin.settings.appraisal'))
+            ->assertForbidden();
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('admin.settings.smtp.update'))
             ->assertForbidden();
     }
 
@@ -187,6 +196,59 @@ class RoleManagementTest extends TestCase
             ->assertOk()
             ->assertSee('data-theme="dark"', false)
             ->assertSee('sidebar-collapsed', false);
+    }
+
+    public function test_smtp_settings_are_encrypted_and_applied_on_later_requests(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.settings.smtp.update'), [
+                'action' => 'save',
+                'smtp_host' => 'smtp.example.com',
+                'smtp_port' => '465',
+                'smtp_encryption' => 'ssl',
+                'smtp_username' => 'mailer@example.com',
+                'smtp_password' => 'test-secret',
+                'smtp_from_address' => 'mailer@example.com',
+                'smtp_from_name' => 'Appraisal Portal',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'SMTP settings saved.');
+
+        $storedPassword = AppraisalSetting::get('smtp_password');
+        $this->assertNotSame('test-secret', $storedPassword);
+        $this->assertSame('test-secret', Crypt::decryptString($storedPassword));
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.settings.appraisal'))
+            ->assertOk();
+
+        $this->assertSame('smtp', config('mail.default'));
+        $this->assertSame('smtp.example.com', config('mail.mailers.smtp.host'));
+        $this->assertSame('smtps', config('mail.mailers.smtp.scheme'));
+        $this->assertSame('mailer@example.com', config('mail.from.address'));
+    }
+
+    public function test_smtp_test_email_uses_submitted_settings_without_saving_them(): void
+    {
+        Mail::fake();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.settings.smtp.update'), [
+                'action' => 'test',
+                'smtp_host' => 'smtp.example.com',
+                'smtp_port' => '587',
+                'smtp_encryption' => 'tls',
+                'smtp_username' => '',
+                'smtp_password' => '',
+                'smtp_from_address' => 'mailer@example.com',
+                'smtp_from_name' => 'Appraisal Portal',
+                'test_recipient' => 'recipient@example.com',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'SMTP test email sent successfully.');
+
+        Mail::assertSent(SmtpTestMail::class, fn (SmtpTestMail $mail) => $mail->hasTo('recipient@example.com'));
+        $this->assertDatabaseMissing('appraisal_settings', ['key' => 'smtp_host']);
     }
 
     public function test_deactivated_user_loses_access(): void

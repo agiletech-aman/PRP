@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\AppraisalFormController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Middleware\ApplySmtpConfiguration;
 use App\PermissionName;
 use Illuminate\Support\Facades\Route;
 
@@ -36,7 +37,7 @@ Route::prefix('appraisal/{appraisal}')
         Route::get('/', 'show')->name('form');
         Route::get('login', 'login')->name('login');
 
-        Route::middleware('auth')->group(function () {
+        Route::middleware(['auth', ApplySmtpConfiguration::class])->group(function () {
             Route::put('/', 'submit')->name('submit');
             Route::put('hr-remarks', 'saveHrRemarks')->name('hr-remarks');
             Route::get('thank-you', 'thankYou')->name('thank-you');
@@ -44,7 +45,7 @@ Route::prefix('appraisal/{appraisal}')
         });
     });
 
-Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', ApplySmtpConfiguration::class])->prefix('admin')->name('admin.')->group(function () {
     Route::view('/no-access', 'admin.no-access')->name('no-access');
 
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile.show');
@@ -107,6 +108,7 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     Route::middleware('can:'.PermissionName::ManageAppraisalSettings->value)->group(function () {
         Route::get('settings/appraisal', [SettingsController::class, 'edit'])->name('settings.appraisal');
         Route::put('settings/appraisal', [SettingsController::class, 'update'])->name('settings.appraisal.update');
+        Route::post('settings/smtp', [SettingsController::class, 'updateSmtp'])->name('settings.smtp.update');
     });
 
     Route::resource('roles', RoleController::class)
