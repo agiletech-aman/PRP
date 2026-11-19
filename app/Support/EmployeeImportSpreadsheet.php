@@ -130,8 +130,10 @@ class EmployeeImportSpreadsheet
      */
     public static function read(string $path): array
     {
+        $archivePath = self::copyToZipPath($path);
+
         try {
-            $archive = new PharData($path);
+            $archive = new PharData($archivePath);
 
             if (! isset($archive['xl/worksheets/sheet1.xml'])) {
                 throw new RuntimeException('The Excel workbook does not contain a first worksheet.');
@@ -181,12 +183,39 @@ class EmployeeImportSpreadsheet
 
             return $rows;
         } catch (\Throwable $exception) {
-            if ($exception instanceof RuntimeException) {
+            if ($exception instanceof RuntimeException && ! $exception instanceof \UnexpectedValueException) {
                 throw $exception;
             }
 
             throw new RuntimeException('The uploaded XLSX file is not a valid Excel workbook.', previous: $exception);
+        } finally {
+            unset($archive);
+            if (file_exists($archivePath)) {
+                @unlink($archivePath);
+            }
         }
+    }
+
+    /**
+     * PharData only opens archives whose filename ends in a recognised extension,
+     * so uploaded temp files (e.g. /tmp/phpXXXX) are copied to a ".zip" path first.
+     */
+    private static function copyToZipPath(string $path): string
+    {
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'employee-import-');
+
+        if ($temporaryPath === false) {
+            throw new RuntimeException('Unable to prepare the uploaded Excel workbook.');
+        }
+
+        unlink($temporaryPath);
+        $zipPath = $temporaryPath.'.zip';
+
+        if (! copy($path, $zipPath)) {
+            throw new RuntimeException('Unable to prepare the uploaded Excel workbook.');
+        }
+
+        return $zipPath;
     }
 
     private static function parseXml(string $contents): SimpleXMLElement
