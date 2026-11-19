@@ -128,7 +128,7 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Import employees from an Excel or CSV file and mail each new account's login details.
+     * Import employees from an Excel or CSV file. No mail is sent; login details go out with the appraisal mail.
      */
     public function import(ImportEmployeesRequest $request): RedirectResponse
     {
@@ -298,58 +298,47 @@ class EmployeeController extends Controller
             return back()->withErrors(['file' => $rowErrors ?: ['The uploaded file has no employee rows.']])->withInput();
         }
 
-        $importedCount = 0;
+        $importedCount = count($rows);
 
-        try {
-            DB::transaction(function () use ($rows, &$importedCount) {
-                $importedUsersByCode = [];
+        DB::transaction(function () use ($rows) {
+            $importedUsersByCode = [];
 
-                foreach ($rows as $row) {
-                    $plainPassword = User::generatePassword();
-                    $employee = User::create([
-                        'employee_code' => $row['employee_code'],
-                        'name' => $row['name'],
-                        'email' => $row['email'],
-                        'designation' => $row['designation'] ?: null,
-                        'department_id' => $row['department_id'],
-                        'role_id' => $row['role_id'],
-                        'manager_id' => null,
-                        'joining_date' => $row['joining_date'],
-                        'is_active' => $row['is_active'],
-                        'password' => $plainPassword,
-                    ]);
+            foreach ($rows as $row) {
+                $employee = User::create([
+                    'employee_code' => $row['employee_code'],
+                    'name' => $row['name'],
+                    'email' => $row['email'],
+                    'designation' => $row['designation'] ?: null,
+                    'department_id' => $row['department_id'],
+                    'role_id' => $row['role_id'],
+                    'manager_id' => null,
+                    'joining_date' => $row['joining_date'],
+                    'is_active' => $row['is_active'],
+                    'password' => User::generatePassword(),
+                ]);
 
-                    Mail::send(new EmployeeCredentialsMail($employee, $plainPassword));
-                    $importedUsersByCode[strtolower($employee->employee_code)] = $employee;
-                    $importedCount++;
+                $importedUsersByCode[strtolower($employee->employee_code)] = $employee;
+            }
+
+            foreach ($rows as $row) {
+                $managerCode = strtolower($row['manager_employee_code']);
+
+                if ($managerCode === '') {
+                    continue;
                 }
 
-                foreach ($rows as $row) {
-                    $managerCode = strtolower($row['manager_employee_code']);
+                $manager = $importedUsersByCode[$managerCode]
+                    ?? User::query()->whereRaw('LOWER(employee_code) = ?', [$managerCode])->first();
 
-                    if ($managerCode === '') {
-                        continue;
-                    }
-
-                    $manager = $importedUsersByCode[$managerCode]
-                        ?? User::query()->whereRaw('LOWER(employee_code) = ?', [$managerCode])->first();
-
-                    if ($manager !== null) {
-                        $importedUsersByCode[strtolower($row['employee_code'])]->update(['manager_id' => $manager->id]);
-                    }
+                if ($manager !== null) {
+                    $importedUsersByCode[strtolower($row['employee_code'])]->update(['manager_id' => $manager->id]);
                 }
-            });
-        } catch (TransportExceptionInterface $exception) {
-            report($exception);
-
-            return back()->withErrors([
-                'file' => "Employee import stopped after {$importedCount} employees. Login mail delivery failed; check mail settings and try again.",
-            ]);
-        }
+            }
+        });
 
         $redirect = redirect()
             ->route('admin.employees.index')
-            ->with('status', "{$importedCount} ".Str::plural('employee', $importedCount).' imported and login credentials mailed.'
+            ->with('status', "{$importedCount} ".Str::plural('employee', $importedCount).' imported.'
                 .($rowErrors === [] ? '' : ' Rows with errors were skipped.'));
 
         return $rowErrors === [] ? $redirect : $redirect->withErrors(['file' => $rowErrors]);
@@ -407,34 +396,19 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Create the employee with a random password and mail them their login details.
-     * If the mail cannot be sent, the employee is not created.
+     * Create the employee with a random password. No mail is sent; login details go out with the appraisal mail.
      */
     public function store(StoreEmployeeRequest $request): RedirectResponse
     {
-        try {
-            $employee = DB::transaction(function () use ($request) {
-                $plainPassword = User::generatePassword();
-
-                $employee = User::create([
-                    ...$request->validated(),
-                    'password' => $plainPassword,
-                    'is_active' => $request->boolean('is_active'),
-                ]);
-
-                Mail::send(new EmployeeCredentialsMail($employee, $plainPassword));
-
-                return $employee;
-            });
-        } catch (TransportExceptionInterface $exception) {
-            report($exception);
-
-            return back()->withInput()->withErrors(['employee' => self::MAIL_FAILED_MESSAGE.' The employee was not added.']);
-        }
+        User::create([
+            ...$request->validated(),
+            'password' => User::generatePassword(),
+            'is_active' => $request->boolean('is_active'),
+        ]);
 
         return redirect()
             ->route('admin.employees.index')
-            ->with('status', "Employee added. Login details were mailed to {$employee->email}.");
+            ->with('status', 'Employee added.');
     }
 
     /**

@@ -112,7 +112,7 @@ class EmployeeManagementTest extends TestCase
         $this->assertSame($department->id, $employee->department_id);
         $this->assertSame($role->id, $employee->role_id);
         $this->assertTrue($employee->is_active);
-        Mail::assertSent(EmployeeCredentialsMail::class, 2);
+        Mail::assertNothingSent();
     }
 
     public function test_admin_can_import_employees_from_excel_workbook(): void
@@ -137,7 +137,7 @@ class EmployeeManagementTest extends TestCase
             'employee_code' => 'EMP4001',
             'email' => 'asha.xlsx@example.com',
         ]);
-        Mail::assertSent(EmployeeCredentialsMail::class, fn (EmployeeCredentialsMail $mail) => $mail->hasTo('asha.xlsx@example.com'));
+        Mail::assertNothingSent();
     }
 
     public function test_employee_import_rejects_missing_manager_and_duplicate_rows(): void
@@ -179,66 +179,32 @@ class EmployeeManagementTest extends TestCase
             ->from(route('admin.employees.index'))
             ->post(route('admin.employees.import'), ['file' => $file])
             ->assertRedirect(route('admin.employees.index'))
-            ->assertSessionHas('status', '2 employees imported and login credentials mailed. Rows with errors were skipped.')
+            ->assertSessionHas('status', '2 employees imported. Rows with errors were skipped.')
             ->assertSessionHasErrors('file');
 
         $lead = User::where('employee_code', 'EMP4001')->firstOrFail();
         $this->assertSame($lead->id, User::where('employee_code', 'EMP4002')->firstOrFail()->manager_id);
         $this->assertDatabaseMissing('users', ['employee_code' => 'EMP4003']);
         $this->assertDatabaseMissing('users', ['employee_code' => 'EMP4004']);
-        Mail::assertSent(EmployeeCredentialsMail::class, 2);
+        Mail::assertNothingSent();
     }
 
-    public function test_admin_can_create_employee(): void
+    public function test_admin_can_create_employee_without_sending_mail(): void
     {
         Mail::fake();
         $admin = User::factory()->admin()->create();
 
         $this->actingAs($admin)
             ->post(route('admin.employees.store'), $this->validPayload(['manager_id' => $admin->id]))
-            ->assertRedirect(route('admin.employees.index'));
+            ->assertRedirect(route('admin.employees.index'))
+            ->assertSessionHas('status', 'Employee added.');
 
         $employee = User::where('employee_code', 'EMP2001')->firstOrFail();
 
         $this->assertSame('riya@example.com', $employee->email);
         $this->assertTrue($employee->manager->is($admin));
         $this->assertTrue($employee->is_active);
-
-        Mail::assertSent(EmployeeCredentialsMail::class, function (EmployeeCredentialsMail $mail) use ($employee) {
-            $body = $mail->render();
-
-            return $mail->hasTo('riya@example.com')
-                && strlen($mail->plainPassword) === 10
-                && Hash::check($mail->plainPassword, $employee->password)
-                && str_contains($body, 'EMP2001')
-                && str_contains($body, $mail->plainPassword);
-        });
-    }
-
-    public function test_each_new_employee_gets_a_different_random_password(): void
-    {
-        Mail::fake();
-        $admin = User::factory()->admin()->create();
-
-        $this->actingAs($admin)->post(route('admin.employees.store'), $this->validPayload());
-        $this->post(route('admin.employees.store'), $this->validPayload(['employee_code' => 'EMP2002', 'email' => 'second@example.com']));
-
-        $passwords = Mail::sent(EmployeeCredentialsMail::class)->map(fn (EmployeeCredentialsMail $mail) => $mail->plainPassword);
-
-        $this->assertCount(2, $passwords);
-        $this->assertNotSame($passwords[0], $passwords[1]);
-    }
-
-    public function test_employee_is_not_created_when_credentials_mail_fails(): void
-    {
-        Mail::shouldReceive('send')->once()->andThrow(new TransportException('Connection refused'));
-        $admin = User::factory()->admin()->create();
-
-        $this->actingAs($admin)
-            ->post(route('admin.employees.store'), $this->validPayload())
-            ->assertSessionHasErrors('employee');
-
-        $this->assertDatabaseMissing('users', ['employee_code' => 'EMP2001']);
+        Mail::assertNothingSent();
     }
 
     public function test_admin_can_send_new_credentials_to_an_employee(): void
