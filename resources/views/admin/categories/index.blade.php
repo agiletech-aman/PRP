@@ -26,7 +26,7 @@
                             @if ($category->isCommon())
                                 <span class="pill pill-gray">All departments</span>
                             @else
-                                <span class="pill pill-blue">{{ $category->department->name }}</span>
+                                <span class="pill pill-blue">{{ $category->department?->name ?? 'Deleted department' }}</span>
                             @endif
                         </td>
                         <td>{{ $category->sort_order }}</td>

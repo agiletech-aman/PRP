@@ -126,8 +126,8 @@ class AppraisalController extends Controller
 
         foreach ($this->hrUsers() as $hr) {
             try {
-                DB::transaction(function () use ($hr, $sentAppraisals, $sender, &$issuedPasswords) {
-                    Mail::send(new AppraisalHrNoticeMail($hr, $sentAppraisals, $this->issuePassword($hr, $sender, $issuedPasswords)));
+                DB::transaction(function () use ($hr, $sentAppraisals, &$issuedPasswords) {
+                    Mail::send(new AppraisalHrNoticeMail($hr, $sentAppraisals));
                 });
             } catch (TransportExceptionInterface $exception) {
                 report($exception);

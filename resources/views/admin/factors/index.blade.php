@@ -1,6 +1,6 @@
 <x-layouts.admin
     :title="$category->code.'. '.$category->name"
-    :subtitle="$category->isCommon() ? 'Common heading · shown to all departments' : 'KRA heading · only for '.$category->department->name"
+    :subtitle="$category->isCommon() ? 'Common heading · shown to all departments' : 'KRA heading · only for '.($category->department?->name ?? 'a deleted department')"
 >
     <a href="{{ route('admin.categories.index') }}" class="back-link"><x-icon name="arrow-left" /> All headings</a>
 

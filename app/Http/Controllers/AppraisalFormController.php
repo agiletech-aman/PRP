@@ -164,16 +164,7 @@ class AppraisalFormController extends Controller
             ->get();
 
         foreach ($evaluators as $evaluator) {
-            DB::transaction(function () use ($appraisal, $evaluator) {
-                $plainPassword = null;
-
-                if (! $evaluator->isSuperAdmin() && $evaluator->id !== $appraisal->sent_by) {
-                    $plainPassword = User::generatePassword();
-                    $evaluator->update(['password' => $plainPassword]);
-                }
-
-                Mail::send(new AppraisalReadyForHrMail($appraisal, $evaluator, $plainPassword));
-            });
+            Mail::send(new AppraisalReadyForHrMail($appraisal, $evaluator));
         }
     }
 }

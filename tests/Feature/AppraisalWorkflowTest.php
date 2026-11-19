@@ -106,10 +106,10 @@ class AppraisalWorkflowTest extends TestCase
             $body = $mail->render();
 
             return $mail->hasTo($hr->email)
-                && Hash::check($mail->plainPassword, $hr->fresh()->password)
-                && str_contains($body, $hr->employee_code)
+                && $mail->plainPassword === null
                 && str_contains($body, $employee->name);
         });
+        $this->assertTrue(Hash::check('password', $hr->fresh()->password));
 
         Mail::assertNotSent(AppraisalHrNoticeMail::class, fn (AppraisalHrNoticeMail $mail) => $mail->hasTo($admin->email));
         $this->assertTrue(Hash::check('password', $admin->fresh()->password));
@@ -456,6 +456,8 @@ class AppraisalWorkflowTest extends TestCase
         Mail::assertSent(AppraisalReadyForHrMail::class, 2);
         Mail::assertSent(AppraisalReadyForHrMail::class, fn ($mail) => $mail->hasTo($firstEvaluator->email));
         Mail::assertSent(AppraisalReadyForHrMail::class, fn ($mail) => $mail->hasTo($secondEvaluator->email));
+        Mail::assertNotSent(AppraisalReadyForHrMail::class, fn ($mail) => $mail->plainPassword !== null);
+        $this->assertTrue(Hash::check('password', $firstEvaluator->fresh()->password));
     }
 
     public function test_post_manager_notice_uses_permission_not_removed_recipient_setting(): void
