@@ -140,6 +140,38 @@ class EmployeeManagementTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    public function test_employee_import_accepts_common_date_formats_and_stores_them_as_y_m_d(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Department::factory()->create(['name' => 'Engineering']);
+        $csv = implode("\n", [
+            'employee_code,name,email,designation,department,role,manager_employee_code,joining_date,is_active',
+            'EMP5001,A One,a1@example.com,Dev,Engineering,Employee,,15/01/2026,1',
+            'EMP5002,A Two,a2@example.com,Dev,Engineering,Employee,,05-04-2024,1',
+            'EMP5003,A Three,a3@example.com,Dev,Engineering,Employee,,15-Jan-2026,1',
+            'EMP5004,A Four,a4@example.com,Dev,Engineering,Employee,,45383,1',
+            'EMP5005,A Five,a5@example.com,Dev,Engineering,Employee,,2026.02.01,1',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('employees.csv', $csv);
+
+        $this->actingAs($admin)
+            ->post(route('admin.employees.import'), ['file' => $file])
+            ->assertSessionHasNoErrors();
+
+        $expectedDates = [
+            'EMP5001' => '2026-01-15',
+            'EMP5002' => '2024-04-05',
+            'EMP5003' => '2026-01-15',
+            'EMP5004' => '2024-04-01',
+            'EMP5005' => '2026-02-01',
+        ];
+
+        foreach ($expectedDates as $employeeCode => $expectedDate) {
+            $joiningDate = User::where('employee_code', $employeeCode)->firstOrFail()->joining_date;
+            $this->assertSame($expectedDate, $joiningDate instanceof \DateTimeInterface ? $joiningDate->format('Y-m-d') : substr((string) $joiningDate, 0, 10));
+        }
+    }
+
     public function test_employee_import_rejects_missing_manager_and_duplicate_rows(): void
     {
         $admin = User::factory()->admin()->create();

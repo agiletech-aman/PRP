@@ -252,13 +252,10 @@ class EmployeeController extends Controller
             $joiningDate = null;
 
             if ($row['joining_date'] !== '') {
-                $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $row['joining_date']);
-                $dateErrors = \DateTimeImmutable::getLastErrors();
+                $joiningDate = $this->parseImportDate($row['joining_date']);
 
-                if (! $parsedDate || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0)) || $parsedDate->format('Y-m-d') !== $row['joining_date']) {
-                    $errorsForRow[] = "{$rowPrefix}: Joining date must use YYYY-MM-DD format.";
-                } else {
-                    $joiningDate = $parsedDate->format('Y-m-d');
+                if ($joiningDate === null) {
+                    $errorsForRow[] = "{$rowPrefix}: Joining date {$row['joining_date']} is not a recognised date.";
                 }
             }
 
@@ -393,6 +390,41 @@ class EmployeeController extends Controller
         }
 
         return $rows;
+    }
+
+    /**
+     * Parse a joining date from the import file into Y-m-d. Accepts Excel serial numbers and common
+     * written formats; ambiguous numeric dates are read day-first (e.g. 05/04/2024 is 5 April 2024).
+     */
+    private function parseImportDate(string $value): ?string
+    {
+        $value = trim($value);
+
+        if (preg_match('/^\d+(\.\d+)?$/', $value) && (float) $value >= 1 && (float) $value < 2958466) {
+            return (new \DateTimeImmutable('1899-12-30'))->modify('+'.(int) floor((float) $value).' days')->format('Y-m-d');
+        }
+
+        $normalized = preg_replace('/\s+/', ' ', str_replace(['.', '/', '\\', '_'], '-', $value));
+        $normalized = preg_replace('/(\d)(st|nd|rd|th)/i', '$1', $normalized);
+        $normalized = preg_replace('/[T ]\d{1,2}:\d{2}(:\d{2})?( ?[AP]M)?$/i', '', $normalized);
+
+        $formats = [
+            'Y-m-d', 'Y-n-j', 'd-m-Y', 'j-n-Y', 'd-m-y', 'j-n-y', 'm-d-Y', 'n-j-Y', 'Ymd',
+            'd-M-Y', 'j-M-Y', 'd-M-y', 'j-M-y', 'd-F-Y', 'j-F-Y', 'd M Y', 'j M Y', 'd F Y', 'j F Y',
+            'M d Y', 'M j Y', 'F d Y', 'F j Y', 'M d, Y', 'M j, Y', 'F d, Y', 'F j, Y', 'M-d-Y', 'M-j-Y',
+            'Y-M-d', 'Y M d', 'D, d M Y', 'l, d F Y',
+        ];
+
+        foreach ($formats as $format) {
+            $parsedDate = \DateTimeImmutable::createFromFormat('!'.$format, $normalized);
+            $dateErrors = \DateTimeImmutable::getLastErrors();
+
+            if ($parsedDate && ($dateErrors === false || ($dateErrors['warning_count'] === 0 && $dateErrors['error_count'] === 0))) {
+                return $parsedDate->format('Y-m-d');
+            }
+        }
+
+        return null;
     }
 
     /**
