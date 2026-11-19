@@ -161,6 +161,34 @@ class EmployeeManagementTest extends TestCase
         $this->assertDatabaseMissing('users', ['employee_code' => 'EMP3001']);
     }
 
+    public function test_employee_import_skips_invalid_rows_and_imports_valid_ones(): void
+    {
+        Mail::fake();
+        $admin = User::factory()->admin()->create();
+        Department::factory()->create(['name' => 'Engineering']);
+        $csv = implode("\n", [
+            'employee_code,name,email,designation,department,role,manager_employee_code,joining_date,is_active',
+            'EMP4001,Valid Lead,lead.import@example.com,Lead,Engineering,Employee,,2026-01-15,1',
+            'EMP4002,Valid Member,member.import@example.com,Developer,Engineering,Employee,EMP4001,2026-01-15,1',
+            'EMP4003,Bad Email,not-an-email,Developer,Engineering,Employee,,2026-01-15,1',
+            'EMP4004,Reports To Bad Row,orphan.import@example.com,Developer,Engineering,Employee,EMP4003,2026-01-15,1',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('employees.csv', $csv);
+
+        $this->actingAs($admin)
+            ->from(route('admin.employees.index'))
+            ->post(route('admin.employees.import'), ['file' => $file])
+            ->assertRedirect(route('admin.employees.index'))
+            ->assertSessionHas('status', '2 employees imported and login credentials mailed. Rows with errors were skipped.')
+            ->assertSessionHasErrors('file');
+
+        $lead = User::where('employee_code', 'EMP4001')->firstOrFail();
+        $this->assertSame($lead->id, User::where('employee_code', 'EMP4002')->firstOrFail()->manager_id);
+        $this->assertDatabaseMissing('users', ['employee_code' => 'EMP4003']);
+        $this->assertDatabaseMissing('users', ['employee_code' => 'EMP4004']);
+        Mail::assertSent(EmployeeCredentialsMail::class, 2);
+    }
+
     public function test_admin_can_create_employee(): void
     {
         Mail::fake();

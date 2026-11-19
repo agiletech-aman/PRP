@@ -209,45 +209,44 @@ class EmployeeController extends Controller
             }
 
             $rowPrefix = "Row {$rowNumber}";
+            $errorsForRow = [];
+            $codeKey = strtolower($row['employee_code']);
+            $emailKey = strtolower($row['email']);
 
             if ($row['employee_code'] === '') {
-                $rowErrors[] = "{$rowPrefix}: Employee ID is required.";
+                $errorsForRow[] = "{$rowPrefix}: Employee ID is required.";
             } elseif (strlen($row['employee_code']) > 30) {
-                $rowErrors[] = "{$rowPrefix}: Employee ID must be 30 characters or less.";
-            } elseif (isset($seenCodes[strtolower($row['employee_code'])]) || isset($existingUsersByCode[strtolower($row['employee_code'])])) {
-                $rowErrors[] = "{$rowPrefix}: Employee ID {$row['employee_code']} already exists or is duplicated in the file.";
-            } else {
-                $seenCodes[strtolower($row['employee_code'])] = true;
+                $errorsForRow[] = "{$rowPrefix}: Employee ID must be 30 characters or less.";
+            } elseif (isset($seenCodes[$codeKey]) || isset($existingUsersByCode[$codeKey])) {
+                $errorsForRow[] = "{$rowPrefix}: Employee ID {$row['employee_code']} already exists or is duplicated in the file.";
             }
 
             if ($row['name'] === '') {
-                $rowErrors[] = "{$rowPrefix}: Name is required.";
+                $errorsForRow[] = "{$rowPrefix}: Name is required.";
             } elseif (strlen($row['name']) > 255) {
-                $rowErrors[] = "{$rowPrefix}: Name must be 255 characters or less.";
+                $errorsForRow[] = "{$rowPrefix}: Name must be 255 characters or less.";
             }
 
             if ($row['email'] === '') {
-                $rowErrors[] = "{$rowPrefix}: Email is required.";
+                $errorsForRow[] = "{$rowPrefix}: Email is required.";
             } elseif (! filter_var($row['email'], FILTER_VALIDATE_EMAIL)) {
-                $rowErrors[] = "{$rowPrefix}: Email {$row['email']} is invalid.";
-            } elseif (isset($seenEmails[strtolower($row['email'])]) || isset($existingUsersByEmail[strtolower($row['email'])])) {
-                $rowErrors[] = "{$rowPrefix}: Email {$row['email']} already exists or is duplicated in the file.";
-            } else {
-                $seenEmails[strtolower($row['email'])] = true;
+                $errorsForRow[] = "{$rowPrefix}: Email {$row['email']} is invalid.";
+            } elseif (isset($seenEmails[$emailKey]) || isset($existingUsersByEmail[$emailKey])) {
+                $errorsForRow[] = "{$rowPrefix}: Email {$row['email']} already exists or is duplicated in the file.";
             }
 
             $department = $row['department'] === '' ? null : ($departments[strtolower($row['department'])] ?? null);
 
             if ($row['department'] !== '' && $department === null) {
-                $rowErrors[] = "{$rowPrefix}: Department {$row['department']} does not exist.";
+                $errorsForRow[] = "{$rowPrefix}: Department {$row['department']} does not exist.";
             }
 
             $role = $row['role'] === '' ? null : ($roles[strtolower($row['role'])] ?? null);
 
             if ($row['role'] === '') {
-                $rowErrors[] = "{$rowPrefix}: Role is required.";
+                $errorsForRow[] = "{$rowPrefix}: Role is required.";
             } elseif ($role === null) {
-                $rowErrors[] = "{$rowPrefix}: Role {$row['role']} does not exist or is not assignable.";
+                $errorsForRow[] = "{$rowPrefix}: Role {$row['role']} does not exist or is not assignable.";
             }
 
             $joiningDate = null;
@@ -257,7 +256,7 @@ class EmployeeController extends Controller
                 $dateErrors = \DateTimeImmutable::getLastErrors();
 
                 if (! $parsedDate || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0)) || $parsedDate->format('Y-m-d') !== $row['joining_date']) {
-                    $rowErrors[] = "{$rowPrefix}: Joining date must use YYYY-MM-DD format.";
+                    $errorsForRow[] = "{$rowPrefix}: Joining date must use YYYY-MM-DD format.";
                 } else {
                     $joiningDate = $parsedDate->format('Y-m-d');
                 }
@@ -267,11 +266,25 @@ class EmployeeController extends Controller
             $isActive = in_array($activeValue, ['1', 'yes', 'true', 'active'], true);
 
             if ($activeValue !== '' && ! in_array($activeValue, ['0', '1', 'yes', 'no', 'true', 'false', 'active', 'inactive'], true)) {
-                $rowErrors[] = "{$rowPrefix}: is_active must be 1/0, yes/no or active/inactive.";
+                $errorsForRow[] = "{$rowPrefix}: is_active must be 1/0, yes/no or active/inactive.";
             }
 
-            $rows[] = [
+            if ($row['manager_employee_code'] !== '' && strtolower($row['manager_employee_code']) === $codeKey) {
+                $errorsForRow[] = "{$rowPrefix}: An employee cannot report to themselves.";
+            }
+
+            if ($errorsForRow !== []) {
+                array_push($rowErrors, ...$errorsForRow);
+
+                continue;
+            }
+
+            $seenCodes[$codeKey] = true;
+            $seenEmails[$emailKey] = true;
+
+            $rows[$codeKey] = [
                 ...$row,
+                'row_number' => $rowNumber,
                 'department_id' => $department?->id,
                 'role_id' => $role?->id,
                 'joining_date' => $joiningDate,
@@ -279,44 +292,10 @@ class EmployeeController extends Controller
             ];
         }
 
-        foreach ($rows as $row) {
-            $code = strtolower($row['employee_code']);
-            $managerCode = strtolower($row['manager_employee_code']);
+        $rows = $this->dropRowsWithInvalidManagers($rows, $existingUsersByCode, $rowErrors);
 
-            if ($managerCode !== '' && $managerCode === $code) {
-                $rowErrors[] = "Row {$row['employee_code']}: An employee cannot report to themselves.";
-            }
-
-            if ($managerCode !== '' && ! isset($seenCodes[$managerCode]) && ! isset($existingUsersByCode[$managerCode])) {
-                $rowErrors[] = "Row {$row['employee_code']}: Reporting manager {$row['manager_employee_code']} was not found.";
-            }
-        }
-
-        $pendingManagerCodes = [];
-
-        foreach ($rows as $row) {
-            if ($row['manager_employee_code'] !== '') {
-                $pendingManagerCodes[strtolower($row['employee_code'])] = strtolower($row['manager_employee_code']);
-            }
-        }
-
-        foreach ($pendingManagerCodes as $startCode => $firstManagerCode) {
-            $currentCode = $firstManagerCode;
-            $visitedCodes = [$startCode];
-
-            while ($currentCode !== '' && isset($pendingManagerCodes[$currentCode])) {
-                if (in_array($currentCode, $visitedCodes, true)) {
-                    $rowErrors[] = "Employee {$startCode}: Reporting manager hierarchy contains a cycle.";
-                    break;
-                }
-
-                $visitedCodes[] = $currentCode;
-                $currentCode = $pendingManagerCodes[$currentCode] ?? '';
-            }
-        }
-
-        if ($rowErrors !== []) {
-            return back()->withErrors(['file' => $rowErrors])->withInput();
+        if ($rows === []) {
+            return back()->withErrors(['file' => $rowErrors ?: ['The uploaded file has no employee rows.']])->withInput();
         }
 
         $importedCount = 0;
@@ -368,9 +347,63 @@ class EmployeeController extends Controller
             ]);
         }
 
-        return redirect()
+        $redirect = redirect()
             ->route('admin.employees.index')
-            ->with('status', "{$importedCount} ".Str::plural('employee', $importedCount).' imported and login credentials mailed.');
+            ->with('status', "{$importedCount} ".Str::plural('employee', $importedCount).' imported and login credentials mailed.'
+                .($rowErrors === [] ? '' : ' Rows with errors were skipped.'));
+
+        return $rowErrors === [] ? $redirect : $redirect->withErrors(['file' => $rowErrors]);
+    }
+
+    /**
+     * Remove rows whose reporting manager is missing (or was itself skipped) or forms a cycle,
+     * repeating until every remaining row points at an importable or existing manager.
+     *
+     * @param  array<string, array<string, mixed>>  $rows
+     * @param  array<string, int>  $existingUsersByCode
+     * @param  list<string>  $rowErrors
+     * @return array<string, array<string, mixed>>
+     */
+    private function dropRowsWithInvalidManagers(array $rows, array $existingUsersByCode, array &$rowErrors): array
+    {
+        do {
+            $removedAny = false;
+
+            foreach ($rows as $codeKey => $row) {
+                $managerCode = strtolower($row['manager_employee_code']);
+
+                if ($managerCode !== '' && ! isset($rows[$managerCode]) && ! isset($existingUsersByCode[$managerCode])) {
+                    $rowErrors[] = "Row {$row['row_number']}: Reporting manager {$row['manager_employee_code']} was not found.";
+                    unset($rows[$codeKey]);
+                    $removedAny = true;
+                }
+            }
+        } while ($removedAny);
+
+        foreach (array_keys($rows) as $startCode) {
+            if (! isset($rows[$startCode])) {
+                continue;
+            }
+
+            $visitedCodes = [$startCode];
+            $currentCode = strtolower($rows[$startCode]['manager_employee_code']);
+
+            while ($currentCode !== '' && isset($rows[$currentCode])) {
+                if (in_array($currentCode, $visitedCodes, true)) {
+                    foreach (array_slice($visitedCodes, array_search($currentCode, $visitedCodes, true)) as $cycleCode) {
+                        $rowErrors[] = "Row {$rows[$cycleCode]['row_number']}: Reporting manager hierarchy contains a cycle.";
+                        unset($rows[$cycleCode]);
+                    }
+
+                    return $this->dropRowsWithInvalidManagers($rows, $existingUsersByCode, $rowErrors);
+                }
+
+                $visitedCodes[] = $currentCode;
+                $currentCode = strtolower($rows[$currentCode]['manager_employee_code']);
+            }
+        }
+
+        return $rows;
     }
 
     /**
