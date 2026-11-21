@@ -42,6 +42,7 @@
                         <td>
                             <div class="actions">
                                 <x-icon-link :href="route('appraisal.form', $appraisal)" icon="eye" label="View" />
+                                <x-icon-link :href="route('admin.appraisal-reports.export-detail', $appraisal)" icon="download" label="Download detailed report" />
                             </div>
                         </td>
                     </tr>

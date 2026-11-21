@@ -88,4 +88,66 @@ class AppraisalReportController extends Controller
             fclose($output);
         }, Response::HTTP_OK, $headers);
     }
+
+    /**
+     * Export one appraisal with the self, manager and HR rating of every KRA.
+     */
+    public function exportDetail(Appraisal $appraisal): StreamedResponse
+    {
+        $appraisal->load(['employee.department', 'manager', 'department', 'ratings']);
+
+        $fileName = 'appraisal-report-'.str($appraisal->employee->employee_code ?: $appraisal->employee->name)->slug().'-'.now()->format('Y-m-d').'.csv';
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
+        ];
+
+        return response()->stream(function () use ($appraisal) {
+            $output = fopen('php://output', 'w');
+            fwrite($output, "\xEF\xBB\xBF");
+
+            foreach ([
+                ['Employee Name', $appraisal->employee->name],
+                ['Employee Code', $appraisal->employee->employee_code],
+                ['Department', $appraisal->department?->name ?? $appraisal->employee->department?->name],
+                ['Manager', $appraisal->manager?->name],
+                ['Appraisal', $appraisal->title],
+                ['Status', $appraisal->status->label()],
+                ['Sent Date', $appraisal->sent_at?->format('d-m-Y')],
+                ['Completed Date', $appraisal->manager_submitted_at?->format('d-m-Y')],
+            ] as $row) {
+                fputcsv($output, $row);
+            }
+
+            fputcsv($output, []);
+            fputcsv($output, ['#', 'Category', 'KRA / Factor', 'Self Rating', 'Manager Rating', 'HR Rating']);
+
+            foreach ($appraisal->ratings as $index => $rating) {
+                fputcsv($output, [
+                    $index + 1,
+                    $rating->category_name,
+                    $rating->factor_name,
+                    $rating->employee_rating,
+                    $rating->manager_rating,
+                    $rating->hr_rating,
+                ]);
+            }
+
+            fputcsv($output, [
+                '', '', 'Average',
+                $appraisal->averageRating('employee'),
+                $appraisal->averageRating('manager'),
+                $appraisal->averageRating('hr'),
+            ]);
+
+            fputcsv($output, []);
+            fputcsv($output, ['Employee Comments', $appraisal->employee_comments]);
+            fputcsv($output, ['Manager Comments', $appraisal->manager_comments]);
+            fputcsv($output, ['HR Comments', $appraisal->hr_comments]);
+            fputcsv($output, ['HR Remarks', $appraisal->hr_remarks]);
+
+            fclose($output);
+        }, Response::HTTP_OK, $headers);
+    }
 }

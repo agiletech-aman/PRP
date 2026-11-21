@@ -529,6 +529,18 @@ class AppraisalWorkflowTest extends TestCase
             ->assertOk()
             ->assertDownload('appraisal-performance-report-'.now()->format('Y-m-d').'.csv');
 
+        $detailResponse = $this->actingAs($evaluator)
+            ->get(route('admin.appraisal-reports.export-detail', $appraisal))
+            ->assertOk();
+        $detailCsv = $detailResponse->streamedContent();
+        $rating = $appraisal->ratings()->first();
+        $this->assertStringContainsString('KRA / Factor', $detailCsv);
+        $this->assertStringContainsString($rating->factor_name, $detailCsv);
+        $this->assertStringContainsString(
+            implode(',', [1, $rating->category_name, $rating->factor_name, $rating->employee_rating, $rating->manager_rating, 5]),
+            str_replace('"', '', $detailCsv)
+        );
+
         $this->actingAs($evaluator)
             ->get(route('appraisal.form', $appraisal))
             ->assertOk();

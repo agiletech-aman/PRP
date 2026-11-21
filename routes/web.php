@@ -101,6 +101,7 @@ Route::middleware(['auth', ApplySmtpConfiguration::class])->prefix('admin')->nam
     Route::middleware('can:'.PermissionName::ViewPerformanceReports->value)->prefix('appraisal-reports')->name('appraisal-reports.')->group(function () {
         Route::get('/', [AppraisalReportController::class, 'index'])->name('index');
         Route::get('/export', [AppraisalReportController::class, 'export'])->name('export');
+        Route::get('/{appraisal}/export', [AppraisalReportController::class, 'exportDetail'])->name('export-detail');
     });
 
     Route::get('my-appraisals', [AppraisalReviewController::class, 'index'])->name('appraisals.mine');
