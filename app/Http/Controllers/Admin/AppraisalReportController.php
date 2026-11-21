@@ -144,8 +144,7 @@ class AppraisalReportController extends Controller
             fputcsv($output, []);
             fputcsv($output, ['Employee Comments', $appraisal->employee_comments]);
             fputcsv($output, ['Manager Comments', $appraisal->manager_comments]);
-            fputcsv($output, ['HR Comments', $appraisal->hr_comments]);
-            fputcsv($output, ['HR Remarks', $appraisal->hr_remarks]);
+            fputcsv($output, ['HR Remarks', $appraisal->hr_remarks ?: $appraisal->hr_comments]);
 
             fclose($output);
         }, Response::HTTP_OK, $headers);
